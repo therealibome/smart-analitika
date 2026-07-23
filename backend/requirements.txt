@@ -1,5 +1,7 @@
 fastapi
-uvicorn
+uvicorn[standard]
+websockets
+wsproto
 pandas
 openpyxl
 matplotlib

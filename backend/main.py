@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
 
-# Matplotlib-ni headless (server) rejimida ishlatish
+# Matplotlib-ni server rejimida ishlatish (GUI ekrani ochilmasligi uchun)
 import matplotlib
 
 matplotlib.use('Agg')
@@ -33,23 +33,23 @@ app.add_middleware(
 )
 
 # ==========================================
-# 🤖 TELEGRAM BOT SOZLAMALARI
+# 🤖 TELEGRAM BOT SOZLAMALARI (Sinov uchun to'g'ridan-to'g'ri)
 # ==========================================
-# Token va Chat ID-ni shuyerga qo'yishingiz yoki Render Environment Variables-ga kiritishingiz mumkin
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSHkI")
-ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "6758258778")  # Telegram ID-ingiz
+BOT_TOKEN = "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSHkI"  # 👈 BotFather bergan TO'LIQ tokeningizni yozing
+ADMIN_CHAT_ID = "6758258778"  # 👈 @userinfobot bergan ID-ingizni yozing
 
 
 async def send_telegram_message(chat_id: str, text: str):
-    """Telegram bot orqali xabar yuboruvchi asinxron funksiya"""
-    if not BOT_TOKEN or "O'ZINGIZNING" in BOT_TOKEN:
-        print("⚠️ Telegram Bot Token o'rnatilmagan!")
+    """Telegram bot orqali xabar yuboruvchi funksiya"""
+    if not BOT_TOKEN:
+        print("⚠️ Bot Token yo'q!")
         return False
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     async with httpx.AsyncClient() as client:
         try:
             res = await client.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            print(f"📡 Telegram javobi: {res.status_code} - {res.text}")  # Terminalda natijani ko'rish uchun
             return res.status_code == 200
         except Exception as e:
             print(f"❌ Telegram xatolik: {e}")
@@ -97,7 +97,6 @@ async def login(data: dict):
 
 @app.post("/api/admin/request-otp")
 async def request_otp():
-    # 6 xonali tasodifiy OTP generatsiya qilamiz
     otp_code = str(random.randint(100000, 999999))
     admin_otp_store["current_otp"] = otp_code
 
@@ -110,8 +109,7 @@ async def request_otp():
 
     sent = await send_telegram_message(ADMIN_CHAT_ID, msg)
     if not sent:
-        # Agar bot ishlamasa ham test qilish uchun terminalga chiqarib qo'yamiz
-        print(f"🔑 GENERATION OTP KOD: {otp_code}")
+        print(f"🔑 GENERATED OTP KOD: {otp_code}")
 
     return {"status": "success", "message": "Kod Telegramga yuborildi!"}
 
@@ -122,7 +120,7 @@ async def verify_otp(data: dict):
     real_otp = admin_otp_store.get("current_otp")
 
     if real_otp and user_otp == real_otp:
-        admin_otp_store.pop("current_otp", None)  # Bir marta ishlatilgach o'chiriladi
+        admin_otp_store.pop("current_otp", None)
         return {"status": "success"}
 
     raise HTTPException(status_code=400, detail="Tasdiqlash kodi xato!")
@@ -296,13 +294,12 @@ async def export_video(username: Optional[str] = None):
         y_final = top_df.values
 
         frames = []
-        num_frames = 12  # RAM uchun optimal kadrlar soni
+        num_frames = 12
 
         for i in range(1, num_frames + 1):
             progress = i / num_frames
             current_y = y_final * progress
 
-            # RAM tejamkorligi: dpi=85, kichikroq o'lcham
             fig, ax = plt.subplots(figsize=(7, 4), dpi=85)
             ax.bar(x_names, current_y, color='#2563EB', width=0.5)
             ax.set_ylim(0, max(y_final) * 1.15)
@@ -336,7 +333,7 @@ async def export_video(username: Optional[str] = None):
 
 
 # ==========================================
-# 💬 CHAT WEBSOCKET
+# 💬 CHAT WEBSOCKET (Telegram Botga Yuborish)
 # ==========================================
 
 @app.websocket("/api/chat/ws")
@@ -348,9 +345,23 @@ async def websocket_chat(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
+
+            user_text = msg.get("text", "Fayl/Media yuborildi")
+            username = msg.get("username", "Anonim")
+
+            # 📲 Telegram Bot orqali shaxsiy admin chatiga habar boradi
+            tg_message = (
+                "💬 <b>Saytdan Yangi Xabar!</b>\n\n"
+                f"👤 <b>Kimdan:</b> @{username}\n"
+                f"📝 <b>Xabar:</b> {user_text}"
+            )
+            await send_telegram_message(ADMIN_CHAT_ID, tg_message)
+
+            # Saytdagi chat oynasiga tasdiq xabari qaytaramiz
             await websocket.send_json({
                 "type": "message",
-                "text": f"Qabul qilindi: {msg.get('text', 'Fayl/Media')}"
+                "text": "Xabaringiz adminga yetkazildi! Tez orada javob beramiz."
             })
+
     except WebSocketDisconnect:
         active_connections.remove(websocket)
