@@ -20,7 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-app = FastAPI(title="Smart Analytics Multi-User Live Chat Backend")
+app = FastAPI(title="Smart Analytics Live Chat Backend")
 
 # ==========================================
 # 1. 🌐 CORS SOZLAMASI
@@ -40,8 +40,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSH
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "6758258778")
 SERVER_URL = "https://smart-analitikabyklv.onrender.com"
 
-# Active WebSocket xaritasi: { "username": websocket_connection }
+# Active WebSocket xaritasi: { "username_lowercase": websocket_connection }
 user_connections: Dict[str, WebSocket] = {}
+last_active_user: Optional[str] = None
 
 
 # ==========================================
@@ -56,9 +57,19 @@ async def setup_telegram_webhook():
         async with httpx.AsyncClient() as client:
             try:
                 res = await client.get(url)
-                print(f"🔗 Telegram Webhook: {res.json()}")
+                print(f"🔗 Telegram Webhook status: {res.json()}")
             except Exception as e:
                 print(f"❌ Webhook error: {e}")
+
+
+@app.get("/api/set-webhook")
+async def manual_set_webhook():
+    """Qo'lda Webhook-ni qayta ulash faydali liniyasi"""
+    webhook_endpoint = f"{SERVER_URL}/api/telegram-webhook"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_endpoint}"
+    async with httpx.AsyncClient() as client:
+        res = await client.get(url)
+        return res.json()
 
 
 # ==========================================
@@ -116,9 +127,8 @@ def parse_admin_command(raw_text: str):
     parts = raw_text.strip().split(maxsplit=1)
     first_word = parts[0]
 
-    # Agar birinchi so'z / yoki @ bilan boshlangan bo'lsa
     if first_word.startswith("/") or first_word.startswith("@"):
-        target_username = first_word.lstrip("/@").strip()
+        target_username = first_word.lstrip("/@").strip().lower()
         clean_text = parts[1] if len(parts) > 1 else ""
         return target_username, clean_text
 
@@ -282,6 +292,7 @@ async def export_video(username: Optional[str] = None):
 
 @app.websocket("/api/chat/ws")
 async def websocket_chat(websocket: WebSocket):
+    global last_active_user
     await websocket.accept()
     current_username = None
     try:
@@ -290,16 +301,19 @@ async def websocket_chat(websocket: WebSocket):
             data = await websocket.receive_text()
             msg = json.loads(data)
 
-            username = msg.get("username", "Anonim")
-            current_username = username
-            user_connections[username] = websocket
+            raw_username = msg.get("username", "Anonim").strip()
+            username_key = raw_username.lower()
+
+            current_username = username_key
+            user_connections[username_key] = websocket
+            last_active_user = username_key
 
             msg_type = msg.get("type")
 
             # Saytdan kelgan matn
             if msg_type == "text":
                 text = msg.get("text", "")
-                caption = f"💬 <b>Saytdan xabar</b>\n👤 User: /<code>{username}</code>\n\n📝 {text}"
+                caption = f"💬 <b>Saytdan xabar</b>\n👤 User: /<code>{raw_username}</code>\n\n📝 {text}"
                 await send_tg_text(ADMIN_CHAT_ID, caption)
 
             # Saytdan kelgan fayl/media
@@ -309,7 +323,7 @@ async def websocket_chat(websocket: WebSocket):
                 b64_data = msg.get("file_data", "")
                 file_bytes = base64.b64decode(b64_data)
 
-                await send_tg_media(ADMIN_CHAT_ID, file_bytes, file_name, mime_type, username)
+                await send_tg_media(ADMIN_CHAT_ID, file_bytes, file_name, mime_type, raw_username)
 
     except WebSocketDisconnect:
         if current_username and current_username in user_connections:
@@ -317,48 +331,57 @@ async def websocket_chat(websocket: WebSocket):
 
 
 # ==========================================
-# 📥 TELEGRAM WEBHOOK (/username bilan uzatish)
+# 📥 TELEGRAM WEBHOOK (Telegram Bot -> Sayt User)
 # ==========================================
 @app.post("/api/telegram-webhook")
 async def telegram_webhook(request: Request):
-    """Admin /username bilan yozgan xabarlarni mos keluvchi sayt foydalanuvchisiga yuboradi"""
+    """Admin kiritgan xabarni mos keluvchi sayt foydalanuvchisiga uzatadi"""
     try:
         data = await request.json()
         message = data.get("message", {})
 
         raw_text = message.get("text") or message.get("caption") or ""
-        target_username, clean_text = parse_admin_command(raw_text)
+        parsed_target, clean_text = parse_admin_command(raw_text)
 
-        if target_username:
-            if target_username in user_connections:
-                ws = user_connections[target_username]
+        # Agar /username yozilgan bo'lsa o'shanga, yozilmagan bo'lsa oxirgi aktiv userga yuboradi
+        target_username = parsed_target if parsed_target else last_active_user
 
-                # 1. Matn
-                if "text" in message and clean_text:
-                    await ws.send_json({"type": "message", "text": clean_text})
+        if target_username and target_username in user_connections:
+            ws = user_connections[target_username]
 
-                # 2. Rasm
-                elif "photo" in message:
-                    photo = message["photo"][-1]
-                    img_url = await get_tg_file_url(photo["file_id"])
-                    if img_url:
-                        await ws.send_json({"type": "image", "image": img_url})
+            # 1. Matnli xabar
+            if "text" in message and clean_text:
+                await ws.send_json({"type": "message", "text": clean_text})
+                await send_tg_text(ADMIN_CHAT_ID, f"✅ @{target_username} ga yuborildi.")
 
-                # 3. Video
-                elif "video" in message:
-                    vid_url = await get_tg_file_url(message["video"]["file_id"])
-                    if vid_url:
-                        await ws.send_json({"type": "video", "video": vid_url})
+            # 2. Rasm
+            elif "photo" in message:
+                photo = message["photo"][-1]
+                img_url = await get_tg_file_url(photo["file_id"])
+                if img_url:
+                    await ws.send_json({"type": "image", "image": img_url})
+                    await send_tg_text(ADMIN_CHAT_ID, f"🖼 ✅ @{target_username} ga rasm yuborildi.")
 
-                # 4. Fayl / Hujjat
-                elif "document" in message:
-                    doc = message["document"]
-                    doc_url = await get_tg_file_url(doc["file_id"])
-                    if doc_url:
-                        await ws.send_json({"type": "file", "name": doc.get("file_name", "Fayl"), "file": doc_url})
+            # 3. Video
+            elif "video" in message:
+                vid_url = await get_tg_file_url(message["video"]["file_id"])
+                if vid_url:
+                    await ws.send_json({"type": "video", "video": vid_url})
+                    await send_tg_text(ADMIN_CHAT_ID, f"🎥 ✅ @{target_username} ga video yuborildi.")
+
+            # 4. Hujjat / Fayl
+            elif "document" in message:
+                doc = message["document"]
+                doc_url = await get_tg_file_url(doc["file_id"])
+                if doc_url:
+                    await ws.send_json({"type": "file", "name": doc.get("file_name", "Fayl"), "file": doc_url})
+                    await send_tg_text(ADMIN_CHAT_ID, f"📁 ✅ @{target_username} ga fayl yuborildi.")
+        else:
+            if target_username:
+                await send_tg_text(ADMIN_CHAT_ID,
+                                   f"❌ <b>@{target_username}</b> hozir saytda emas (oflayn yoki ulagich uzilgan).")
             else:
-                # Agar user saytda oflayn bo'lsa
-                await send_tg_text(ADMIN_CHAT_ID, f"⚠️ <b>@{target_username}</b> hozir saytda emas (oflayn).")
+                await send_tg_text(ADMIN_CHAT_ID, "⚠️ Hozircha hech qanday foydalanuvchi online emas.")
 
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
