@@ -1,9 +1,10 @@
 fastapi
 uvicorn
-httpx
 pandas
 openpyxl
 matplotlib
-seaborn
+numpy
+httpx
+imageio
+imageio-ffmpeg
 python-multipart
-websockets

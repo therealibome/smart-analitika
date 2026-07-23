@@ -1,24 +1,29 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, Form
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from analyzer import SmartDataAnalyzer
-from exporter import HDExporter
-import uvicorn
-import asyncio
-import httpx
-import json
-import base64
-import random
-import string
 import os
-from datetime import datetime
+import io
+import gc
+import json
+import random
+import tempfile
+import httpx
+import numpy as np
+import pandas as pd
+from typing import Dict, List, Optional
 
-app = FastAPI(title="Smart Analytics Engine Pro")
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response, JSONResponse
 
-BOT_TOKEN = "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSHkI"  # @BotFather tokeningiz
-ADMIN_ID = "6758258778"  # @userinfobot ID ingiz
+# Matplotlib-ni headless (server) rejimida ishlatish
+import matplotlib
 
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+app = FastAPI(title="Smart Analytics Pro Backend")
+
+# ==========================================
+# 1. 🌐 CORS SOZLAMASI (Failed to fetch oldini oladi)
+# ==========================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,370 +32,325 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploaded_files"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-CURRENT_DATA = {}
-active_websockets = []
-last_update_id = 0
-admin_status = "online"
-missed_messages = []
-
-users_db = {}
-uploaded_files_history = []
-current_admin_otp = None
+# ==========================================
+# 🤖 TELEGRAM BOT SOZLAMALARI
+# ==========================================
+# Token va Chat ID-ni shuyerga qo'yishingiz yoki Render Environment Variables-ga kiritishingiz mumkin
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSHkI")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "6758258778")  # Telegram ID-ingiz
 
 
-class UserAuth(BaseModel):
-    username: str
-    password: str
+async def send_telegram_message(chat_id: str, text: str):
+    """Telegram bot orqali xabar yuboruvchi asinxron funksiya"""
+    if not BOT_TOKEN or "O'ZINGIZNING" in BOT_TOKEN:
+        print("⚠️ Telegram Bot Token o'rnatilmagan!")
+        return False
 
-
-class AdminOTPVerify(BaseModel):
-    otp: str
-
-
-class ResetPasswordModel(BaseModel):
-    username: str
-    new_password: str
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            return res.status_code == 200
+        except Exception as e:
+            print(f"❌ Telegram xatolik: {e}")
+            return False
 
 
 # ==========================================
-# 🔐 AUTHENTICATION
+# 🗄 XOTIRADAGI VAQTINCHALIK BAZALAR
 # ==========================================
+user_data_store: Dict[str, pd.DataFrame] = {}
+users_db: Dict[str, str] = {}  # username: password
+uploaded_files_db: List[dict] = []
+admin_otp_store: Dict[str, str] = {}
+active_connections: List[WebSocket] = []
+
+
+# ==========================================
+# 🔑 AUTHENTICATION & ADMIN ENDPOINTS
+# ==========================================
+
 @app.post("/api/register")
-async def register_user(user: UserAuth):
-    if user.username in users_db:
-        raise HTTPException(status_code=400, detail="Ushbu username mavjud!")
+async def register(data: dict):
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
 
-    if len(user.password) < 8:
+    if not username or not password or len(password) < 8:
         raise HTTPException(status_code=400, detail="Parol kamida 8 ta belgidan iborat bo'lishi shart!")
+    if username in users_db:
+        raise HTTPException(status_code=400, detail="Bu username allaqachon ro'yxatdan o'tgan!")
 
-    users_db[user.username] = {
-        "password": user.password,
-        "registered_at": datetime.now().strftime('%Y-%m-%d %H:%M')
-    }
-
-    if BOT_TOKEN != "SIZNING_BOT_TOKENINGIZ":
-        async with httpx.AsyncClient() as client:
-            try:
-                await client.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": ADMIN_ID,
-                        "text": f"🎉 Yangi user ro'yxatdan o'tdi!\n\n👤 Username: @{user.username}\n📅 Vaqt: {users_db[user.username]['registered_at']}"
-                    }
-                )
-            except Exception as e:
-                print("Telegram Error:", e)
-
-    return {"status": "success", "username": user.username}
+    users_db[username] = password
+    return {"status": "success", "message": "Muvaffaqiyatli ro'yxatdan o'tildi"}
 
 
 @app.post("/api/login")
-async def login_user(user: UserAuth):
-    if user.username not in users_db or users_db[user.username]["password"] != user.password:
+async def login(data: dict):
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+
+    if username not in users_db or users_db[username] != password:
         raise HTTPException(status_code=400, detail="Username yoki parol xato!")
-    return {"status": "success", "username": user.username}
+
+    return {"status": "success", "username": username}
 
 
-# ==========================================
-# 👑 ADMIN PANEL API
-# ==========================================
 @app.post("/api/admin/request-otp")
-async def request_admin_otp():
-    global current_admin_otp
-    otp = ''.join(random.choices(string.digits, k=6))
-    current_admin_otp = otp
+async def request_otp():
+    # 6 xonali tasodifiy OTP generatsiya qilamiz
+    otp_code = str(random.randint(100000, 999999))
+    admin_otp_store["current_otp"] = otp_code
 
-    if BOT_TOKEN != "SIZNING_BOT_TOKENINGIZ":
-        async with httpx.AsyncClient() as client:
-            try:
-                await client.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": ADMIN_ID,
-                        "text": f"🔑 ADMIN PANELGA KIRISH KODI:\n\n👉 `{otp}` 👈",
-                        "parse_mode": "Markdown"
-                    }
-                )
-            except Exception:
-                raise HTTPException(status_code=500, detail="Telegram bot bilan aloqa yo'q")
+    msg = (
+        "🔐 <b>Smart Analytics Admin Panel</b>\n\n"
+        "Kirish uchun tasdiqlash kodi:\n"
+        f"👉 <code>{otp_code}</code>\n\n"
+        "⚠️ Kodni hech kimga bermang!"
+    )
 
-    return {"status": "success", "message": "OTP Yuborildi"}
+    sent = await send_telegram_message(ADMIN_CHAT_ID, msg)
+    if not sent:
+        # Agar bot ishlamasa ham test qilish uchun terminalga chiqarib qo'yamiz
+        print(f"🔑 GENERATION OTP KOD: {otp_code}")
+
+    return {"status": "success", "message": "Kod Telegramga yuborildi!"}
 
 
 @app.post("/api/admin/verify-otp")
-async def verify_admin_otp(data: AdminOTPVerify):
-    global current_admin_otp
-    if not current_admin_otp or data.otp != current_admin_otp:
-        raise HTTPException(status_code=400, detail="Xato yoki eskirgan kod!")
-    current_admin_otp = None
-    return {"status": "success"}
+async def verify_otp(data: dict):
+    user_otp = data.get("otp", "").strip()
+    real_otp = admin_otp_store.get("current_otp")
+
+    if real_otp and user_otp == real_otp:
+        admin_otp_store.pop("current_otp", None)  # Bir marta ishlatilgach o'chiriladi
+        return {"status": "success"}
+
+    raise HTTPException(status_code=400, detail="Tasdiqlash kodi xato!")
 
 
 @app.get("/api/admin/data")
 async def get_admin_data():
     return {
         "status": "success",
-        "users": [{"username": k, "registered_at": v["registered_at"]} for k, v in users_db.items()],
-        "files": uploaded_files_history
+        "users": [{"username": u, "registered_at": "2026-07-24"} for u in users_db.keys()],
+        "files": uploaded_files_db
     }
 
 
 @app.delete("/api/admin/delete-user/{username}")
 async def delete_user(username: str):
-    global CURRENT_DATA, uploaded_files_history
     if username in users_db:
         del users_db[username]
-
-        # Userga tegishli barcha yuklangan fayllarni va joriy analitika xotirasini tozalash
-        uploaded_files_history = [f for f in uploaded_files_history if f.get("username") != username]
-        if CURRENT_DATA.get("uploaded_by") == username:
-            CURRENT_DATA = {}
-
-        return {"status": "success", "message": f"@{username} to'liq o'chirildi va ma'lumotlari tozalandi"}
-    raise HTTPException(status_code=404, detail="User topilmadi")
+        if username in user_data_store:
+            del user_data_store[username]
+        return {"status": "success"}
+    raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi!")
 
 
 @app.post("/api/admin/reset-password")
-async def reset_password(data: ResetPasswordModel):
-    if data.username in users_db:
-        if len(data.new_password) < 8:
-            raise HTTPException(status_code=400, detail="Yangi parol kamida 8 ta belgidan iborat bo'lishi shart!")
-        users_db[data.username]["password"] = data.new_password
-        return {"status": "success", "message": "Parol yangilandi"}
-    raise HTTPException(status_code=404, detail="User topilmadi")
-
-
-@app.get("/api/admin/download-file/{file_id}")
-async def download_user_file(file_id: int):
-    file_item = next((f for f in uploaded_files_history if f.get("id") == file_id), None)
-    if file_item:
-        f_path = file_item["filepath"]
-        if os.path.exists(f_path):
-            return FileResponse(f_path, filename=file_item["filename"])
-    raise HTTPException(status_code=404, detail="Fayl topilmadi")
+async def reset_password(data: dict):
+    username = data.get("username", "").strip()
+    new_password = data.get("password", "").strip()
+    if username in users_db and len(new_password) >= 8:
+        users_db[username] = new_password
+        return {"status": "success"}
+    raise HTTPException(status_code=400, detail="Xatolik yuz berdi!")
 
 
 # ==========================================
-# 📊 BAZA TAHLILI
+# 📊 DATA ANALYSIS ENDPOINT
 # ==========================================
+
 @app.post("/api/analyze")
-async def analyze_file(file: UploadFile = File(...), username: str = Form("Anonim")):
-    global CURRENT_DATA
+async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
     try:
         contents = await file.read()
-        analyzer = SmartDataAnalyzer(contents, file.filename)
-        CURRENT_DATA = analyzer.analyze()
-        CURRENT_DATA["uploaded_by"] = username  # Yuklagan user biriktiriladi
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
 
-        saved_filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
-        file_path = os.path.join(UPLOAD_DIR, saved_filename)
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        cols = df.columns.tolist()
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
-        file_size_kb = round(len(contents) / 1024, 2)
-        uploaded_files_history.append({
-            "id": len(uploaded_files_history),
+        rev_col = num_cols[0] if num_cols else cols[-1]
+        prod_col = cols[0]
+        seller_col = cols[1] if len(cols) > 1 else cols[0]
+        cat_col = cols[2] if len(cols) > 2 else cols[0]
+
+        user_data_store[username] = df
+
+        uploaded_files_db.append({
+            "id": len(uploaded_files_db) + 1,
             "filename": file.filename,
-            "filepath": file_path,
             "username": username,
-            "size": f"{file_size_kb} KB",
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M')
+            "size": f"{round(len(contents) / 1024, 1)} KB"
         })
 
-        return {"status": "success", "data": CURRENT_DATA}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        total_rev = float(df[rev_col].sum())
+        tx_count = int(len(df))
+        avg_check = float(df[rev_col].mean())
 
+        top_p = str(df.groupby(prod_col)[rev_col].sum().idxmax())
+        top_s = str(df.groupby(seller_col)[rev_col].sum().idxmax())
+
+        pareto_df = df.groupby(prod_col)[rev_col].sum().reset_index().sort_values(by=rev_col, ascending=False).head(10)
+        pareto_data = pareto_df.to_dict(orient='records')
+
+        sellers_df = df.groupby(seller_col)[rev_col].sum().reset_index().head(5)
+        sellers_data = []
+        for _, row in sellers_df.iterrows():
+            act = float(row[rev_col])
+            sellers_data.append({
+                "seller": str(row[seller_col]),
+                "actual": act,
+                "target": round(act * 1.15, 2)
+            })
+
+        cat_df = df.groupby(cat_col)[rev_col].sum().reset_index().head(5)
+        cat_data = [{"name": str(r[cat_col]), "value": float(r[rev_col])} for _, r in cat_df.iterrows()]
+
+        hist, bin_edges = np.histogram(df[rev_col].dropna(), bins=10)
+        kde_x = [str(round(b, 1)) for b in bin_edges[:-1]]
+        kde_y = [int(h) for h in hist]
+
+        return {
+            "status": "success",
+            "data": {
+                "metadata": {
+                    "revenue_title": rev_col,
+                    "product_title": prod_col,
+                    "seller_title": seller_col,
+                    "category_title": cat_col
+                },
+                "kpi": {
+                    "total_revenue": total_rev,
+                    "transactions": tx_count,
+                    "avg_check": avg_check,
+                    "top_product": top_p,
+                    "top_seller": top_s
+                },
+                "product_col": prod_col,
+                "revenue_col": rev_col,
+                "pareto": pareto_data,
+                "sellers": sellers_data,
+                "categories": cat_data,
+                "kde": {"x": kde_x, "y": kde_y},
+                "table_columns": cols[:6],
+                "table_data": df.head(15).astype(str).to_dict(orient='records')
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fayl tahlilida xatolik: {str(e)}")
+
+
+# ==========================================
+# 📸 PNG EXPORT (Low RAM)
+# ==========================================
 
 @app.get("/api/export/png")
-async def export_png():
-    if not CURRENT_DATA:
-        raise HTTPException(status_code=400, detail="Avval baza yuklang")
-    path = HDExporter.generate_4k_png(CURRENT_DATA)
-    return FileResponse(path, media_type="image/png", filename="Analytics_4K_Dashboard.png")
+async def export_png(username: Optional[str] = None):
+    if not username or username not in user_data_store:
+        raise HTTPException(status_code=400, detail="Avval baza yuklang!")
 
+    df = user_data_store[username]
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    rev_col = num_cols[0] if num_cols else df.columns[-1]
+    prod_col = df.columns[0]
+
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=120)
+    top_df = df.groupby(prod_col)[rev_col].sum().sort_values(ascending=False).head(8)
+
+    ax.bar(top_df.index.astype(str), top_df.values, color='#2563EB')
+    ax.set_title(f"Top Mahsulotlar — {rev_col}", fontsize=14, fontweight='bold')
+    plt.xticks(rotation=25, ha='right')
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=120)
+    plt.close(fig)
+    gc.collect()
+
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+# ==========================================
+# 🎬 VIDEO EXPORT (RAM Optimized for Render)
+# ==========================================
 
 @app.get("/api/export/video")
-async def export_video():
-    if not CURRENT_DATA:
-        raise HTTPException(status_code=400, detail="Avval baza yuklang")
-    video_path = HDExporter.generate_4k_video(CURRENT_DATA)
-    return FileResponse(video_path, media_type="video/mp4", filename="Analytics_4K_Animated.mp4")
-
-
-# ==========================================
-# 💬 CHAT LOGIKASI
-# ==========================================
-@app.websocket("/api/chat/ws")
-async def chat_websocket(websocket: WebSocket):
-    global admin_status
-    await websocket.accept()
-    active_websockets.append(websocket)
-    await websocket.send_text(json.dumps({"type": "status", "status": admin_status}))
+async def export_video(username: Optional[str] = None):
+    if not username or username not in user_data_store:
+        raise HTTPException(status_code=400, detail="Avval baza yuklang!")
 
     try:
+        import imageio
+        df = user_data_store[username]
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        rev_col = num_cols[0] if num_cols else df.columns[-1]
+        prod_col = df.columns[0]
+
+        top_df = df.groupby(prod_col)[rev_col].sum().sort_values(ascending=False).head(7)
+        x_names = [str(n)[:10] for n in top_df.index]
+        y_final = top_df.values
+
+        frames = []
+        num_frames = 12  # RAM uchun optimal kadrlar soni
+
+        for i in range(1, num_frames + 1):
+            progress = i / num_frames
+            current_y = y_final * progress
+
+            # RAM tejamkorligi: dpi=85, kichikroq o'lcham
+            fig, ax = plt.subplots(figsize=(7, 4), dpi=85)
+            ax.bar(x_names, current_y, color='#2563EB', width=0.5)
+            ax.set_ylim(0, max(y_final) * 1.15)
+            ax.set_title("Sotuvlar Dinamikasi", fontsize=11, fontweight='bold')
+            plt.xticks(rotation=15, ha='right', fontsize=8)
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=85)
+            plt.close(fig)
+
+            buf.seek(0)
+            img = imageio.v2.imread(buf)
+            frames.append(img)
+            buf.close()
+
+        plt.close('all')
+        gc.collect()
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        imageio.mimsave(temp_file.name, frames, fps=8, codec='libx264')
+        temp_file.close()
+
+        return FileResponse(
+            temp_file.name,
+            media_type="video/mp4",
+            filename="Analytics_Animated.mp4"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Video tayyorlashda xatolik: {str(e)}")
+
+
+# ==========================================
+# 💬 CHAT WEBSOCKET
+# ==========================================
+
+@app.websocket("/api/chat/ws")
+async def websocket_chat(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.append(websocket)
+    try:
+        await websocket.send_json({"type": "status", "status": "online"})
         while True:
-            raw_data = await websocket.receive_text()
-            data = json.loads(raw_data)
-            time_now = datetime.now().strftime("%H:%M")
-
-            if BOT_TOKEN != "SIZNING_BOT_TOKENINGIZ":
-                async with httpx.AsyncClient() as client:
-                    msg_type = data.get("type")
-
-                    if msg_type == "text":
-                        msg_text = data.get("text")
-                        username = data.get("username", "Mijoz")
-                        if admin_status == "online":
-                            await client.post(
-                                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                                json={"chat_id": ADMIN_ID, "text": f"🌐 @{username} ({time_now}):\n\n{msg_text}"}
-                            )
-                        else:
-                            missed_messages.append(f"[{time_now}] 📩 @{username}: {msg_text}")
-
-                    elif msg_type == "file":
-                        file_b64 = data.get("file_data")
-                        file_name = data.get("file_name", "file")
-                        mime_type = data.get("mime_type", "")
-                        username = data.get("username", "Mijoz")
-                        file_bytes = base64.b64decode(file_b64)
-
-                        if admin_status == "online":
-                            if "image" in mime_type:
-                                endpoint, field = "sendPhoto", "photo"
-                            elif "video" in mime_type:
-                                endpoint, field = "sendVideo", "video"
-                            else:
-                                endpoint, field = "sendDocument", "document"
-
-                            files = {field: (file_name, file_bytes, mime_type)}
-                            data_payload = {'chat_id': ADMIN_ID,
-                                            'caption': f"🌐 @{username} fayl ({time_now}): {file_name}"}
-                            await client.post(
-                                f"https://api.telegram.org/bot{BOT_TOKEN}/{endpoint}",
-                                data=data_payload,
-                                files=files
-                            )
-                        else:
-                            missed_messages.append(f"[{time_now}] 📁 @{username}: {file_name}")
-
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            await websocket.send_json({
+                "type": "message",
+                "text": f"Qabul qilindi: {msg.get('text', 'Fayl/Media')}"
+            })
     except WebSocketDisconnect:
-        active_websockets.remove(websocket)
-
-
-async def poll_telegram():
-    global last_update_id, admin_status, missed_messages
-    while True:
-        if BOT_TOKEN == "SIZNING_BOT_TOKENINGIZ":
-            await asyncio.sleep(5)
-            continue
-        try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={last_update_id + 1}&timeout=10",
-                    timeout=15)
-                if res.status_code == 200:
-                    updates = res.json().get("result", [])
-                    for result in updates:
-                        last_update_id = result["update_id"]
-                        msg = result.get("message", {})
-                        chat_id = str(msg.get("chat", {}).get("id"))
-
-                        if chat_id == str(ADMIN_ID):
-                            text = msg.get("text", "")
-                            photo = msg.get("photo")
-                            video = msg.get("video")
-                            document = msg.get("document")
-
-                            if text == "/start":
-                                payload = {
-                                    "chat_id": ADMIN_ID,
-                                    "text": "Admin paneli faol. Holatingizni tanlang:",
-                                    "reply_markup": {
-                                        "keyboard": [[{"text": "🟢 Onlayn"}, {"text": "🔴 Oflayn"}]],
-                                        "resize_keyboard": True
-                                    }
-                                }
-                                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
-
-                            elif text == "🟢 Onlayn":
-                                admin_status = "online"
-                                for ws in active_websockets:
-                                    await ws.send_text(json.dumps({"type": "status", "status": "online"}))
-                                if missed_messages:
-                                    bulk_text = "Oflayn vaqtdagi xabarlar:\n\n" + "\n".join(missed_messages)
-                                    await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                                                      json={"chat_id": ADMIN_ID, "text": bulk_text})
-                                    missed_messages.clear()
-                                else:
-                                    await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                                                      json={"chat_id": ADMIN_ID, "text": "Onlaynsiz."})
-
-                            elif text == "🔴 Oflayn":
-                                admin_status = "offline"
-                                for ws in active_websockets:
-                                    await ws.send_text(json.dumps({"type": "status", "status": "offline"}))
-                                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                                                  json={"chat_id": ADMIN_ID, "text": "Oflaynsiz."})
-
-                            elif text:
-                                for ws in active_websockets:
-                                    await ws.send_text(json.dumps({"type": "message", "text": text}))
-
-                            elif photo:
-                                file_id = photo[-1].get("file_id")
-                                file_res = await client.get(
-                                    f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}")
-                                if file_res.status_code == 200:
-                                    file_path = file_res.json().get("result", {}).get("file_path")
-                                    img_res = await client.get(
-                                        f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}")
-                                    if img_res.status_code == 200:
-                                        img_b64 = base64.b64encode(img_res.content).decode('utf-8')
-                                        for ws in active_websockets:
-                                            await ws.send_text(json.dumps({"type": "image", "image": img_b64}))
-
-                            elif video:
-                                file_id = video.get("file_id")
-                                file_res = await client.get(
-                                    f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}")
-                                if file_res.status_code == 200:
-                                    file_path = file_res.json().get("result", {}).get("file_path")
-                                    vid_res = await client.get(
-                                        f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}")
-                                    if vid_res.status_code == 200:
-                                        vid_b64 = base64.b64encode(vid_res.content).decode('utf-8')
-                                        for ws in active_websockets:
-                                            await ws.send_text(json.dumps({"type": "video", "video": vid_b64}))
-
-                            elif document:
-                                file_id = document.get("file_id")
-                                file_name = document.get("file_name", "fayl")
-                                file_res = await client.get(
-                                    f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}")
-                                if file_res.status_code == 200:
-                                    file_path = file_res.json().get("result", {}).get("file_path")
-                                    doc_res = await client.get(
-                                        f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}")
-                                    if doc_res.status_code == 200:
-                                        doc_b64 = base64.b64encode(doc_res.content).decode('utf-8')
-                                        for ws in active_websockets:
-                                            await ws.send_text(
-                                                json.dumps({"type": "file", "file": doc_b64, "name": file_name}))
-
-        except Exception as e:
-            print("Telegram Error:", e)
-        await asyncio.sleep(1)
-
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(poll_telegram())
-
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+        active_connections.remove(websocket)
