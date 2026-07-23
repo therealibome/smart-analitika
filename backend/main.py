@@ -187,7 +187,7 @@ async def get_admin_data():
 
 
 # ==========================================
-# 📊 BAZANI TAHLIL QILISH (Duplication-Safe)
+# 📊 AQLI BAZANI TAHLIL QILISH ENGINE
 # ==========================================
 @app.post("/api/analyze")
 async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
@@ -201,11 +201,9 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         else:
             df = pd.read_excel(io.BytesIO(contents))
 
-        # ⚡ 1. Bir xil nomli dublikat ustunlarni olib tashlash
+        # Dublikat va bo'sh ustun/qatorlarni tozalash
         df = df.loc[:, ~df.columns.duplicated()].copy()
         df.columns = [str(c).strip() for c in df.columns]
-
-        # 2. Bo'sh qator va kataklarni tozalash
         df = df.dropna(how='all').fillna(0)
 
         if df.empty or len(df.columns) == 0:
@@ -213,13 +211,66 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
 
         cols = df.columns.tolist()
 
-        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        rev_col = num_cols[0] if num_cols else cols[-1]
-        prod_col = cols[0]
-        seller_col = cols[1] if len(cols) > 1 else cols[0]
-        cat_col = cols[2] if len(cols) > 2 else cols[0]
+        # 🎯 1. Mahsulot ustunini topish (NOMI, MAHSULOT, NAME, PRODUCT...)
+        prod_col = None
+        for kw in ['nomi', 'mahsulot', 'product', 'item', 'title', 'name', 'tovar', 'xizmat']:
+            for c in cols:
+                if kw in c.lower() and not any(id_kw in c.lower() for id_kw in ['id', 'kod', 'code']):
+                    prod_col = c
+                    break
+            if prod_col: break
 
-        # Narx/Tushum ustunidagi belgilarni tozalash
+        if not prod_col:
+            for c in cols:
+                if df[c].dtype == object and not any(
+                        k in c.lower() for k in ['sana', 'date', 'id', 'kod', 'sotuvchi', 'xodim']):
+                    prod_col = c
+                    break
+        if not prod_col: prod_col = cols[0]
+
+        # 🎯 2. Sotuvchi ustunini topish (SOTUVCHI, XODIM, SELLER...)
+        seller_col = None
+        for kw in ['sotuvchi', 'xodim', 'menejer', 'seller', 'employee', 'kassir', 'operator']:
+            for c in cols:
+                if kw in c.lower() and not any(id_kw in c.lower() for id_kw in ['id', 'kod', 'code']):
+                    seller_col = c
+                    break
+            if seller_col: break
+        if not seller_col: seller_col = prod_col
+
+        # 🎯 3. Kategoriya ustunini topish (KATEGORIYA, TUR, CATEGORY...)
+        cat_col = None
+        for kw in ['kategoriya', 'tur', 'category', 'type', 'bo\'lim', 'bolim', 'group']:
+            for c in cols:
+                if kw in c.lower() and not any(id_kw in c.lower() for id_kw in ['id', 'kod', 'code']):
+                    cat_col = c
+                    break
+            if cat_col: break
+        if not cat_col: cat_col = prod_col
+
+        # 🎯 4. Tushum / Summa / Miqdor ustunini topish (ID va Kodlarni o'tkazib yuboradi!)
+        rev_col = None
+        for kw in ['tushum', 'summa', 'narx', 'price', 'amount', 'revenue', 'total', 'jami', 'qiymat', 'soni', 'miqdor',
+                   'qty']:
+            for c in cols:
+                if kw in c.lower():
+                    rev_col = c
+                    break
+            if rev_col: break
+
+        if not rev_col:
+            for c in df.select_dtypes(include=[np.number]).columns:
+                c_low = c.lower()
+                if not any(bad in c_low for bad in
+                           ['id', 'kod', 'code', 'sana', 'date', 'year', 'oy', 'num', 'no', 'index']):
+                    rev_col = c
+                    break
+
+        if not rev_col:
+            num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            rev_col = num_cols[-1] if num_cols else cols[-1]
+
+        # Son qiymatini tozalash (so'm, $, bo'sh joylarni olib tashlash)
         if df[rev_col].dtype == object:
             df[rev_col] = pd.to_numeric(
                 df[rev_col].astype(str).str.replace(r'[^\d.]', '', regex=True),
@@ -232,7 +283,7 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
             "id": len(uploaded_files_db) + 1,
             "filename": file.filename,
             "username": username,
-            "size": f"{round(len(contents)/1024, 1)} KB"
+            "size": f"{round(len(contents) / 1024, 1)} KB"
         })
 
         total_rev = float(df[rev_col].sum())
@@ -242,27 +293,16 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         top_p = str(df.groupby(prod_col)[rev_col].sum().idxmax()) if not df.empty else "-"
         top_s = str(df.groupby(seller_col)[rev_col].sum().idxmax()) if not df.empty else "-"
 
-        # ⚡ 3. Xavfsiz guruhlash (Cannot insert collision oldini olish)
-        if prod_col == rev_col:
-            pareto_s = df.groupby(prod_col).size().sort_values(ascending=False).head(10)
-            pareto_data = [{prod_col: str(k), rev_col: int(v)} for k, v in pareto_s.items()]
-        else:
-            pareto_s = df.groupby(prod_col)[rev_col].sum().sort_values(ascending=False).head(10)
-            pareto_data = [{prod_col: str(k), rev_col: float(v)} for k, v in pareto_s.items()]
+        # Xavfsiz guruhlash (cannot insert xatolarining oldini oladi)
+        pareto_s = df.groupby(prod_col)[rev_col].sum().sort_values(ascending=False).head(10)
+        pareto_data = [{prod_col: str(k), rev_col: float(v)} for k, v in pareto_s.items()]
 
-        if seller_col == rev_col:
-            sellers_s = df.groupby(seller_col).size().head(5)
-            sellers_data = [{"seller": str(k), "actual": float(v), "target": round(float(v)*1.15, 2)} for k, v in sellers_s.items()]
-        else:
-            sellers_s = df.groupby(seller_col)[rev_col].sum().head(5)
-            sellers_data = [{"seller": str(k), "actual": float(v), "target": round(float(v)*1.15, 2)} for k, v in sellers_s.items()]
+        sellers_s = df.groupby(seller_col)[rev_col].sum().head(5)
+        sellers_data = [{"seller": str(k), "actual": float(v), "target": round(float(v) * 1.15, 2)} for k, v in
+                        sellers_s.items()]
 
-        if cat_col == rev_col:
-            cat_s = df.groupby(cat_col).size().head(5)
-            cat_data = [{"name": str(k), "value": float(v)} for k, v in cat_s.items()]
-        else:
-            cat_s = df.groupby(cat_col)[rev_col].sum().head(5)
-            cat_data = [{"name": str(k), "value": float(v)} for k, v in cat_s.items()]
+        cat_s = df.groupby(cat_col)[rev_col].sum().head(5)
+        cat_data = [{"name": str(k), "value": float(v)} for k, v in cat_s.items()]
 
         hist, bin_edges = np.histogram(df[rev_col].dropna(), bins=10)
         kde_x = [str(round(b, 1)) for b in bin_edges[:-1]]
@@ -296,6 +336,7 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Faylni tahlil qilishda xatolik: {str(e)}")
+
 
 # ==========================================
 # 📸 PNG EXPORT
@@ -356,7 +397,7 @@ async def export_video(username: Optional[str] = None):
 
 
 # ==========================================
-# 💬 REALTIME LIVE CHAT (Sayt -> Telegram Bot)
+# 💬 REALTIME LIVE CHAT
 # ==========================================
 @app.websocket("/api/chat/ws")
 async def websocket_chat(websocket: WebSocket):
@@ -397,7 +438,7 @@ async def websocket_chat(websocket: WebSocket):
 
 
 # ==========================================
-# 📥 TELEGRAM WEBHOOK (Telegram Bot -> Sayt User)
+# 📥 TELEGRAM WEBHOOK
 # ==========================================
 @app.post("/api/telegram-webhook")
 async def telegram_webhook(request: Request):
