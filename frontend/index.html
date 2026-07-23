@@ -3,38 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Analytics — Biznes Analitika Platformasi</title>
+    <title>Smart Analitika — Biznes Analitika Platformasi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         * {
             -webkit-tap-highlight-color: transparent;
+            box-sizing: border-box;
         }
 
         body {
-            background-color: #F8FAFC;
+            background: #F1F5F9;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #0F172A;
         }
 
-        /* GLASS CARD & SMOOTH HOVER */
+        /* CARD STYLES & GLASSMORPHISM */
         .glass-card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(226, 232, 240, 0.9);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04);
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 8px 10px -6px rgba(15, 23, 42, 0.02);
             border-radius: 20px;
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .glass-card:hover {
-            box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.08);
+            border-color: rgba(147, 197, 253, 0.6);
+            box-shadow: 0 20px 30px -10px rgba(37, 99, 235, 0.08);
+        }
+
+        .kpi-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
+            border: 1px solid #E2E8F0;
+            border-radius: 18px;
+            padding: 20px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-3px);
+            border-color: #3B82F6;
+            box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.12);
         }
 
         @keyframes fadeInUp {
             from {
                 opacity: 0;
-                transform: translateY(20px) scale(0.98);
+                transform: translateY(18px) scale(0.98);
             }
             to {
                 opacity: 1;
@@ -43,26 +63,25 @@
         }
 
         .animate-fade-in {
-            animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            opacity: 0;
+            animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        /* BUTTON ANIMATION & GLOW */
+        /* BUTTON GLOW & HOVER */
         .btn-glow {
-            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .btn-glow:hover {
-            box-shadow: 0 0 22px rgba(37, 99, 235, 0.45);
-            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 0 20px rgba(37, 99, 235, 0.38);
+            transform: translateY(-2px);
         }
 
         .btn-glow:active {
-            transform: translateY(-1px) scale(0.98);
+            transform: translateY(0) scale(0.98);
         }
 
         .tab-btn {
-            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .tab-active {
@@ -93,18 +112,11 @@
             height: 46px;
             cursor: pointer;
             flex-shrink: 0;
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .player-wrapper:hover {
-            transform: scale(1.12) rotate(5deg);
-        }
-
-        @media (min-width: 640px) {
-            .player-wrapper {
-                width: 52px;
-                height: 52px;
-            }
+            transform: scale(1.1) rotate(6deg);
         }
 
         .vinyl-record {
@@ -119,7 +131,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
         }
 
         .vinyl-record::after {
@@ -149,7 +161,7 @@
             pointer-events: none;
             z-index: 20;
             transform-origin: 10px 10px;
-            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .tonearm-base {
@@ -182,13 +194,8 @@
             transform: rotate(20deg);
         }
 
-        .arm-rest {
-            transform: rotate(0deg);
-        }
-
-        .arm-play {
-            transform: rotate(32deg);
-        }
+        .arm-rest { transform: rotate(0deg); }
+        .arm-play { transform: rotate(32deg); }
 
         /* CHAT UI */
         .chat-bubble-user {
@@ -200,7 +207,7 @@
             max-width: 85%;
             font-size: 13px;
             word-break: break-word;
-            animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: fadeInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .chat-bubble-admin {
@@ -213,13 +220,10 @@
             font-size: 13px;
             border: 1px solid #E2E8F0;
             word-break: break-word;
-            animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            animation: fadeInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        .chat-container::-webkit-scrollbar {
-            width: 4px;
-        }
-
+        .chat-container::-webkit-scrollbar { width: 4px; }
         .chat-container::-webkit-scrollbar-thumb {
             background: #CBD5E1;
             border-radius: 10px;
@@ -238,7 +242,7 @@
             z-index: 45;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .chat-blur-overlay.active {
@@ -254,15 +258,13 @@
             z-index: 40;
             display: flex;
             align-items: center;
-            transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Yopilganda ekrandan faqat strelka chiqib turadi */
         .floating-widget-container.collapsed {
             transform: translateX(calc(100% - 44px));
         }
 
-        /* Strelka tugmasi - Smooth Gradient & Hover */
         .toggle-arrow-btn {
             width: 44px;
             height: 56px;
@@ -277,15 +279,14 @@
             font-size: 15px;
             box-shadow: -4px 0 20px rgba(37, 99, 235, 0.35);
             flex-shrink: 0;
-            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .toggle-arrow-btn:hover {
             background: linear-gradient(135deg, #1D4ED8, #1E40AF);
-            padding-right: 6px;
+            padding-right: 4px;
         }
 
-        /* Panel - Kengroq, Ochiq va Smooth */
         .widget-panel {
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(16px);
@@ -297,17 +298,15 @@
             border: 1px solid rgba(226, 232, 240, 0.9);
             border-right: none;
             box-shadow: -10px 10px 30px rgba(0, 0, 0, 0.08);
-            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        /* Chat Button Hover */
         .chat-trigger-btn {
-            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         .chat-trigger-btn:hover {
-            transform: scale(1.12);
-            box-shadow: 0 8px 22px rgba(37, 99, 235, 0.45);
+            transform: scale(1.1);
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
         }
     </style>
 </head>
@@ -317,18 +316,17 @@
     <source src="YE_Father.mp3" type="audio/mpeg">
 </audio>
 
-<div id="chatBlurOverlay" class="chat-blur-overlay" onclick="closeAllWidgets()"></div>
+<div id="chatBlurOverlay" class="chat-blur-overlay" onclick="closeChatOnly()"></div>
 
 <div id="authModal"
-     class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-all duration-300">
+     class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-card w-full max-w-sm sm:max-w-md p-6 sm:p-8 flex flex-col gap-5 shadow-2xl relative animate-fade-in">
         <div class="flex justify-between items-center border-b border-slate-200 pb-3">
             <h2 id="authTitle" class="text-lg sm:text-xl font-extrabold text-slate-800">Tizimga Kirish</h2>
-            <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2 transition-colors">✖
-            </button>
+            <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2 transition-colors">✖</button>
         </div>
 
-        <div id="authAlert" class="hidden p-3 rounded-xl text-xs font-semibold text-center transition-all"></div>
+        <div id="authAlert" class="hidden p-3 rounded-xl text-xs font-semibold text-center"></div>
 
         <form onsubmit="handleAuth(event)" class="flex flex-col gap-4">
             <div>
@@ -337,7 +335,7 @@
                        class="w-full mt-1.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 transition-all">
             </div>
             <div>
-                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Parol (Min. 8 ta belgi)</label>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Parol (Kamida 8 ta belgi)</label>
                 <input type="password" id="authPassword" required minlength="8" placeholder="••••••••"
                        class="w-full mt-1.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 transition-all">
             </div>
@@ -358,15 +356,14 @@
 </div>
 
 <div id="adminModal"
-     class="fixed inset-0 bg-slate-900/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden transition-all duration-300">
+     class="fixed inset-0 bg-slate-900/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
     <div class="glass-card w-full max-w-4xl max-h-[90vh] p-5 sm:p-7 flex flex-col gap-5 shadow-2xl relative overflow-hidden animate-fade-in">
         <div class="flex justify-between items-center border-b border-slate-200 pb-3">
             <div class="flex items-center gap-2">
                 <span class="text-xl">👑</span>
                 <h2 class="text-base sm:text-xl font-extrabold text-slate-800">Admin Boshqaruv Paneli</h2>
             </div>
-            <button onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2 transition-colors">✖
-            </button>
+            <button onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2 transition-colors">✖</button>
         </div>
 
         <div id="adminOtpStep" class="flex flex-col items-center justify-center py-8 gap-4 max-w-xs mx-auto w-full">
@@ -378,7 +375,7 @@
 
             <div id="otpInputArea" class="hidden w-full flex flex-col gap-3">
                 <input type="text" id="adminOtpInput" placeholder="6 xonali kod" maxlength="6"
-                       class="w-full text-center text-xl font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-xl py-2.5 focus:outline-none focus:border-blue-600 transition-all">
+                       class="w-full text-center text-xl font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-xl py-2.5 focus:outline-none focus:border-blue-600">
                 <button onclick="verifyAdminOTP()"
                         class="btn-glow bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs sm:text-sm transition-all">
                     Tasdiqlash ➔
@@ -392,9 +389,9 @@
             <div class="bg-blue-50/80 p-4 rounded-xl border border-blue-200 flex flex-col sm:flex-row items-center gap-3">
                 <span class="text-xs font-bold text-blue-800 whitespace-nowrap">🔑 Parol Tiklash:</span>
                 <input type="text" id="resetUsernameInput" placeholder="Target Username"
-                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none transition-all">
+                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none">
                 <input type="password" id="resetNewPassInput" placeholder="Yangi Parol (min 8)"
-                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none transition-all">
+                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none">
                 <button onclick="executeResetPassword()"
                         class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs w-full sm:w-auto transition-all whitespace-nowrap">
                     Saqlash
@@ -439,7 +436,7 @@
 </div>
 
 <div id="chatWindow"
-     class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px] h-[430px] sm:h-[460px] z-[60] glass-card flex flex-col hidden shadow-2xl transition-all duration-350 cubic-bezier(0.16, 1, 0.3, 1) origin-bottom-right transform scale-95 opacity-0">
+     class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-[360px] h-[430px] sm:h-[460px] z-[60] glass-card flex flex-col hidden shadow-2xl transition-all duration-300 cubic-bezier(0.16, 1, 0.3, 1) origin-bottom-right transform scale-95 opacity-0">
     <div class="bg-blue-600 text-white p-3.5 rounded-t-2xl flex justify-between items-center shadow-md">
         <div class="flex items-center gap-2">
             <span class="text-lg bg-white/20 p-1 rounded-full">👨‍💼</span>
@@ -516,15 +513,14 @@
     </div>
 </div>
 
-<div class="max-w-[1440px] mx-auto space-y-5 sm:space-y-7">
+<div class="max-w-[1440px] mx-auto space-y-6 sm:space-y-8">
 
     <header class="glass-card p-4 sm:p-5 animate-fade-in relative">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <span class="text-3xl sm:text-4xl">📊</span>
                 <div>
-                    <h1 class="text-base sm:text-xl font-extrabold text-slate-800 tracking-tight leading-none">SMART
-                        ANALYTICS</h1>
+                    <h1 class="text-base sm:text-xl font-extrabold text-slate-800 tracking-tight leading-none">SMART ANALYTICS</h1>
                     <p class="text-xs text-slate-500 mt-1">Sotuvlar va Baza Tahlili Platformasi</p>
                 </div>
             </div>
@@ -578,28 +574,25 @@
          class="glass-card p-6 sm:p-8 md:p-10 flex flex-col lg:flex-row items-center justify-between gap-8 animate-fade-in">
         <div class="w-full lg:w-2/3 space-y-4 text-left">
             <span class="inline-block bg-blue-50 text-blue-600 border border-blue-200 text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">🚀 Aqlli Biznes Yechimlar</span>
-            <h2 class="text-xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800 leading-tight">Biznes sotuvlarini
-                zudlik bilan tahlil qiling!</h2>
+            <h2 class="text-xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800 leading-tight">Biznes sotuvlarini tezlik bilan tahlil qiling! (BETA)</h2>
             <p class="text-slate-600 text-xs sm:text-base leading-relaxed">
-                Excel va CSV savdo bazalaringizni yuklang hamda Pareto grafiklari va daromadlar zichligini 4K sifatda
-                vizualizatsiya qiling.
+                Excel va CSV savdo bazalaringizni yuklang hamda Pareto grafiklari va daromadlar zichligini 4K sifatda vizualizatsiya qiling.
             </p>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                <div class="bg-slate-50/80 p-4 rounded-xl border border-slate-200">
                     <h4 class="font-bold text-slate-700 text-xs sm:text-sm mb-1">ℹ️ Biz haqimizda (About)</h4>
-                    <p class="text-xs text-slate-500 leading-normal">FastAPI va Telegram Bot bilan integratsiya qilingan
-                        avtomatlashtirilgan analiz platformasi.</p>
+                    <p class="text-xs text-slate-500 leading-normal">FastAPI va Telegram Bot bilan integratsiya qilingan avtomatlashtirilgan analiz platformasi.</p>
                 </div>
 
-                <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-2">
+                <div class="bg-slate-50/80 p-4 rounded-xl border border-slate-200 flex flex-col justify-between gap-2">
                     <h4 class="font-bold text-slate-700 text-xs sm:text-sm">📞 Aloqa (Contact)</h4>
                     <div class="flex items-center gap-2 flex-wrap">
-                        <a href="https://t.me/telegram_username" target="_blank"
+                        <a href="https://t.me/klvvv_i" target="_blank"
                            class="bg-blue-500 text-white hover:bg-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm hover:scale-105">
                             ✈️ Telegram
                         </a>
-                        <a href="https://instagram.com/instagram_username" target="_blank"
+                        <a href="https://instagram.com/klvvv_i" target="_blank"
                            class="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm hover:scale-105">
                             📷 Instagram
                         </a>
@@ -609,25 +602,25 @@
 
             <div class="pt-3 flex flex-col sm:flex-row flex-wrap gap-3">
                 <button onclick="promptUpload()"
-                        class="btn-glow bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto">
+                        class="btn-glow bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3.5 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto">
                     📁 Baza Yuklashni Boshlash
                 </button>
                 <button onclick="downloadPNG()"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto hover:scale-105">
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3.5 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto hover:scale-105">
                     📸 4K PNG
                 </button>
                 <button onclick="downloadVideo()"
-                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-3 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto hover:scale-105">
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-3.5 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto hover:scale-105">
                     🎬 4K Video
                 </button>
             </div>
         </div>
 
         <div class="w-full lg:w-1/3 flex justify-center items-center">
-            <div class="relative w-40 h-40 sm:w-52 sm:h-52 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center text-white text-5xl sm:text-6xl shadow-2xl transform rotate-2 hover:rotate-0 transition-all duration-300">
+            <div class="relative w-44 h-44 sm:w-56 sm:h-56 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center text-white text-5xl sm:text-6xl shadow-2xl transform rotate-2 hover:rotate-0 transition-all duration-300">
                 📈
-                <div class="absolute -bottom-3 -left-3 bg-white text-slate-800 px-3 py-1.5 rounded-2xl shadow-lg text-xs font-bold border border-slate-100 whitespace-nowrap">
-                    ⚡ Matplotlib 4K Engine
+                <div class="absolute -bottom-3 -left-3 bg-white text-slate-800 px-3.5 py-1.5 rounded-2xl shadow-lg text-xs font-bold border border-slate-100 whitespace-nowrap">
+                    ⚡ Matplotlib 4K Engine Ishlamoqda
                 </div>
             </div>
         </div>
@@ -650,39 +643,52 @@
     </div>
 
     <div id="content-dashboard" class="space-y-6 hidden">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            <div class="glass-card p-5"><span id="kpi-title-1"
-                                              class="text-xs font-bold text-slate-400 uppercase tracking-wider">Jami Tushum</span>
-                <div class="mt-2"><span id="kpi-revenue"
-                                        class="text-lg sm:text-2xl font-extrabold text-slate-800">0</span></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+            <div class="kpi-card">
+                <span id="kpi-title-1" class="text-xs font-bold text-blue-600 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-md w-fit">Jami Tushum</span>
+                <div class="mt-3"><span id="kpi-revenue" class="text-xl sm:text-3xl font-extrabold text-slate-800">0</span></div>
             </div>
-            <div class="glass-card p-5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Transaksiyalar | Chek</span>
-                <div class="mt-2"><span id="kpi-tx" class="text-lg sm:text-2xl font-extrabold text-slate-800">0</span>
-                </div>
+            <div class="kpi-card">
+                <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2.5 py-1 rounded-md w-fit">Transaksiyalar | Chek</span>
+                <div class="mt-3"><span id="kpi-tx" class="text-xl sm:text-3xl font-extrabold text-slate-800">0</span></div>
             </div>
-            <div class="glass-card p-5 sm:col-span-2 lg:col-span-1"><span id="kpi-title-2"
-                                                                          class="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Yetakchilar</span>
-                <div class="mt-2"><span id="kpi-top" class="text-sm sm:text-lg font-extrabold text-slate-800">-</span>
-                </div>
+            <div class="kpi-card sm:col-span-2 lg:col-span-1">
+                <span id="kpi-title-2" class="text-xs font-bold text-purple-600 uppercase tracking-wider bg-purple-50 px-2.5 py-1 rounded-md w-fit">Top Yetakchilar</span>
+                <div class="mt-3"><span id="kpi-top" class="text-base sm:text-xl font-extrabold text-slate-800 truncate block">-</span></div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 animate-fade-in">
-            <div class="glass-card p-4 sm:p-6"><h3 id="title-pareto" class="text-slate-700 text-sm font-bold mb-3">Top
-                Mahsulotlar</h3>
-                <div id="paretoChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 animate-fade-in">
+            <div class="glass-card p-5 sm:p-6 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 id="title-pareto" class="text-slate-800 text-sm font-bold">Top Mahsulotlar</h3>
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Bar Chart</span>
+                </div>
+                <div id="paretoChart" class="w-full h-[300px] sm:h-[360px]"></div>
             </div>
-            <div class="glass-card p-4 sm:p-6"><h3 id="title-kde" class="text-slate-700 text-sm font-bold mb-3">Zichlik
-                darajasi</h3>
-                <div id="kdeChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+
+            <div class="glass-card p-5 sm:p-6 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 id="title-kde" class="text-slate-800 text-sm font-bold">Zichlik darajasi</h3>
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Line Density</span>
+                </div>
+                <div id="kdeChart" class="w-full h-[300px] sm:h-[360px]"></div>
             </div>
-            <div class="glass-card p-4 sm:p-6"><h3 id="title-seller" class="text-slate-700 text-sm font-bold mb-3">Reja
-                va Amal</h3>
-                <div id="sellerChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+
+            <div class="glass-card p-5 sm:p-6 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 id="title-seller" class="text-slate-800 text-sm font-bold">Reja va Amal</h3>
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Comparison</span>
+                </div>
+                <div id="sellerChart" class="w-full h-[300px] sm:h-[360px]"></div>
             </div>
-            <div class="glass-card p-4 sm:p-6"><h3 id="title-category" class="text-slate-700 text-sm font-bold mb-3">
-                Kategoriyalar</h3>
-                <div id="categoryChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+
+            <div class="glass-card p-5 sm:p-6 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 id="title-category" class="text-slate-800 text-sm font-bold">Kategoriyalar</h3>
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Pie Share</span>
+                </div>
+                <div id="categoryChart" class="w-full h-[300px] sm:h-[360px]"></div>
             </div>
         </div>
     </div>
@@ -690,7 +696,7 @@
     <div id="content-table" class="glass-card p-4 sm:p-6 hidden animate-fade-in">
         <div class="overflow-x-auto max-h-[500px]">
             <table class="w-full text-xs sm:text-sm text-left text-slate-500">
-                <thead class="text-xs text-slate-700 uppercase bg-slate-50 sticky top-0" id="tableHead"></thead>
+                <thead class="text-xs text-slate-700 uppercase bg-slate-100 sticky top-0" id="tableHead"></thead>
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
@@ -722,34 +728,44 @@
         widgetArrow.innerText = isCollapsed ? '◀' : '▶';
     }
 
-    // 2. CHATNI OCHISH VA ORQA FONNI BLUR QILISH
+    // 2. CHATNI OCHISH (Mobil bug to'liq to'g'rilandi: floatingWidget yo'qolib qolmaydi)
     function toggleChat() {
         if (chatWindow.classList.contains('hidden')) {
             chatWindow.classList.remove('hidden');
             chatBlurOverlay.classList.add('active');
-            floatingWidget.classList.add('collapsed');
-            updateArrowState();
             setTimeout(() => chatWindow.classList.remove('scale-95', 'opacity-0'), 10);
             unreadCount = 0;
             msgBadge.classList.add('hidden');
         } else {
-            closeAllWidgets();
+            closeChatOnly();
         }
     }
 
-    // 3. BARCHA VIDJET VA CHATNI BIRGA YOPISH
-    function closeAllWidgets() {
+    // 3. FAQAT CHATNI YOPISH (Vidjet turishda davom etadi)
+    function closeChatOnly() {
         chatWindow.classList.add('scale-95', 'opacity-0');
         chatBlurOverlay.classList.remove('active');
-        floatingWidget.classList.add('collapsed');
-        updateArrowState();
-        setTimeout(() => chatWindow.classList.add('hidden'), 350);
+        setTimeout(() => chatWindow.classList.add('hidden'), 300);
     }
 
-    // 4. SCROLL QILINGANDA AVTOMATIK IKKI TOMONGA YOPILISH
+    // 4. BARCHA VIDJET VA CHATNI BIRGA YOPISH
+    function closeAllWidgets() {
+        closeChatOnly();
+        floatingWidget.classList.add('collapsed');
+        updateArrowState();
+    }
+
+    // 5. XAVFSIZ SCROLL (Telefonda klaviatura va touch harakatlarida chat yo'qolib ketmasligi uchun)
+    let lastScrollY = window.scrollY;
     window.addEventListener('scroll', () => {
-        if (!floatingWidget.classList.contains('collapsed') || chatBlurOverlay.classList.contains('active')) {
-            closeAllWidgets();
+        const currentScrollY = window.scrollY;
+        // Faqat haqiqiy vertical scroll bo'lganda vidjetni yopamiz (chat ochiq bo'lmasa)
+        if (Math.abs(currentScrollY - lastScrollY) > 40) {
+            if (!floatingWidget.classList.contains('collapsed') && !chatBlurOverlay.classList.contains('active')) {
+                floatingWidget.classList.add('collapsed');
+                updateArrowState();
+            }
+            lastScrollY = currentScrollY;
         }
     });
 
@@ -826,7 +842,7 @@
         }
     }
 
-    // TO'LIQ HOME PAGE VA 0-HOLATGA QAYTISH
+    // LOGOUT
     function logout() {
         isAuth = false;
         currentUsername = "";
@@ -956,7 +972,7 @@
             const res = await fetch(`${API_BASE}/admin/reset-password`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, new_password: p})
+                body: JSON.stringify({username: u, password: p})
             });
             if (res.ok) {
                 alert(`@${u} paroli yangilandi!`);
@@ -1156,11 +1172,11 @@
                 chartsObj.forEach(c => c.dispose());
                 chartsObj = [];
 
-                // IDEAL GRID CONFIG
+                // ECHARTS GRID CONFIG (Tekkis va toza)
                 const paretoChart = echarts.init(document.getElementById('paretoChart'));
                 paretoChart.setOption({
                     tooltip: {trigger: 'axis'},
-                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    grid: {top: 20, bottom: 25, left: '3%', right: '3%', containLabel: true},
                     xAxis: {
                         type: 'category',
                         data: result.data.pareto.map(p => p[result.data.product_col].substring(0, 10)),
@@ -1178,7 +1194,7 @@
                 const kdeChart = echarts.init(document.getElementById('kdeChart'));
                 kdeChart.setOption({
                     tooltip: {trigger: 'axis'},
-                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    grid: {top: 20, bottom: 25, left: '3%', right: '3%', containLabel: true},
                     xAxis: {type: 'category', data: result.data.kde.x, axisLabel: {fontSize: 11}},
                     yAxis: {type: 'value', axisLabel: {fontSize: 11}},
                     series: [{
@@ -1194,7 +1210,7 @@
                 const sellerChart = echarts.init(document.getElementById('sellerChart'));
                 sellerChart.setOption({
                     tooltip: {trigger: 'axis'},
-                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    grid: {top: 20, bottom: 25, left: '3%', right: '3%', containLabel: true},
                     xAxis: {type: 'value', axisLabel: {fontSize: 11}},
                     yAxis: {
                         type: 'category',
@@ -1221,7 +1237,7 @@
                 const categoryChart = echarts.init(document.getElementById('categoryChart'));
                 categoryChart.setOption({
                     tooltip: {trigger: 'item'},
-                    series: [{type: 'pie', radius: ['35%', '70%'], data: result.data.categories, label: {fontSize: 11}}]
+                    series: [{type: 'pie', radius: ['38%', '70%'], data: result.data.categories, label: {fontSize: 11}}]
                 });
                 chartsObj.push(categoryChart);
 
@@ -1236,13 +1252,13 @@
         }
     }
 
-    // 📸 4K PNG Yuklab olish (Username parametri qo'shildi)
+    // 📸 4K PNG Yuklab olish
     async function downloadPNG() {
         if (!isAuth) return promptUpload();
         window.open(`${API_BASE}/export/png?username=${encodeURIComponent(currentUsername)}`, '_blank');
     }
 
-    // 🎬 4K Video Render & Download (Username va xatolik nazorati bilan)
+    // 🎬 4K Video Render & Download
     async function downloadVideo() {
         if (!isAuth) return promptUpload();
 
