@@ -187,7 +187,7 @@ async def get_admin_data():
 
 
 # ==========================================
-# 📊 BAZANI TAHLIL QILISH (Robust & NaN-proof)
+# 📊 BAZANI TAHLIL QILISH (Duplication-Safe)
 # ==========================================
 @app.post("/api/analyze")
 async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
@@ -201,14 +201,17 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         else:
             df = pd.read_excel(io.BytesIO(contents))
 
-        # Bo'sh qator va kataklarni xavfsiz tozalash
+        # ⚡ 1. Bir xil nomli dublikat ustunlarni olib tashlash
+        df = df.loc[:, ~df.columns.duplicated()].copy()
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # 2. Bo'sh qator va kataklarni tozalash
         df = df.dropna(how='all').fillna(0)
 
         if df.empty or len(df.columns) == 0:
             raise HTTPException(status_code=400, detail="Yuklangan fayl ichida ma'lumot topilmadi!")
 
-        cols = [str(c).strip() for c in df.columns.tolist()]
-        df.columns = cols
+        cols = df.columns.tolist()
 
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         rev_col = num_cols[0] if num_cols else cols[-1]
@@ -216,7 +219,7 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         seller_col = cols[1] if len(cols) > 1 else cols[0]
         cat_col = cols[2] if len(cols) > 2 else cols[0]
 
-        # Narx/Tushum ustunini matnlardan tozalash ($ / so'm / bo'sh joy)
+        # Narx/Tushum ustunidagi belgilarni tozalash
         if df[rev_col].dtype == object:
             df[rev_col] = pd.to_numeric(
                 df[rev_col].astype(str).str.replace(r'[^\d.]', '', regex=True),
@@ -229,7 +232,7 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
             "id": len(uploaded_files_db) + 1,
             "filename": file.filename,
             "username": username,
-            "size": f"{round(len(contents) / 1024, 1)} KB"
+            "size": f"{round(len(contents)/1024, 1)} KB"
         })
 
         total_rev = float(df[rev_col].sum())
@@ -239,21 +242,27 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         top_p = str(df.groupby(prod_col)[rev_col].sum().idxmax()) if not df.empty else "-"
         top_s = str(df.groupby(seller_col)[rev_col].sum().idxmax()) if not df.empty else "-"
 
-        pareto_df = df.groupby(prod_col)[rev_col].sum().reset_index().sort_values(by=rev_col, ascending=False).head(10)
-        pareto_data = pareto_df.to_dict(orient='records')
+        # ⚡ 3. Xavfsiz guruhlash (Cannot insert collision oldini olish)
+        if prod_col == rev_col:
+            pareto_s = df.groupby(prod_col).size().sort_values(ascending=False).head(10)
+            pareto_data = [{prod_col: str(k), rev_col: int(v)} for k, v in pareto_s.items()]
+        else:
+            pareto_s = df.groupby(prod_col)[rev_col].sum().sort_values(ascending=False).head(10)
+            pareto_data = [{prod_col: str(k), rev_col: float(v)} for k, v in pareto_s.items()]
 
-        sellers_df = df.groupby(seller_col)[rev_col].sum().reset_index().head(5)
-        sellers_data = []
-        for _, row in sellers_df.iterrows():
-            act = float(row[rev_col])
-            sellers_data.append({
-                "seller": str(row[seller_col]),
-                "actual": act,
-                "target": round(act * 1.15, 2)
-            })
+        if seller_col == rev_col:
+            sellers_s = df.groupby(seller_col).size().head(5)
+            sellers_data = [{"seller": str(k), "actual": float(v), "target": round(float(v)*1.15, 2)} for k, v in sellers_s.items()]
+        else:
+            sellers_s = df.groupby(seller_col)[rev_col].sum().head(5)
+            sellers_data = [{"seller": str(k), "actual": float(v), "target": round(float(v)*1.15, 2)} for k, v in sellers_s.items()]
 
-        cat_df = df.groupby(cat_col)[rev_col].sum().reset_index().head(5)
-        cat_data = [{"name": str(r[cat_col]), "value": float(r[rev_col])} for _, r in cat_df.iterrows()]
+        if cat_col == rev_col:
+            cat_s = df.groupby(cat_col).size().head(5)
+            cat_data = [{"name": str(k), "value": float(v)} for k, v in cat_s.items()]
+        else:
+            cat_s = df.groupby(cat_col)[rev_col].sum().head(5)
+            cat_data = [{"name": str(k), "value": float(v)} for k, v in cat_s.items()]
 
         hist, bin_edges = np.histogram(df[rev_col].dropna(), bins=10)
         kde_x = [str(round(b, 1)) for b in bin_edges[:-1]]
@@ -287,7 +296,6 @@ async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Faylni tahlil qilishda xatolik: {str(e)}")
-
 
 # ==========================================
 # 📸 PNG EXPORT
