@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="uz" class="overflow-x-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Analytics — Biznes Analitika Platformasi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body {
+            background-color: #F8FAFC;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04);
+            border-radius: 20px;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeInUp 0.4s ease-out forwards;
+            opacity: 0;
+        }
+
+        .btn-glow {
+            transition: all 0.25s ease;
+        }
+
+        .btn-glow:hover {
+            box-shadow: 0 0 18px rgba(37, 99, 235, 0.35);
+            transform: translateY(-2px);
+        }
+
+        .tab-btn {
+            transition: all 0.3s;
+        }
+
+        .tab-active {
+            border-bottom: 3px solid #2563EB;
+            color: #2563EB;
+            font-weight: 700;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(37, 99, 235, 0.2);
+            border-top-color: #2563EB;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* VINYL ANIMATSIYA */
+        .player-wrapper {
+            position: relative;
+            width: 48px;
+            height: 48px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        @media (min-width: 640px) {
+            .player-wrapper {
+                width: 64px;
+                height: 64px;
+            }
+        }
+
+        .vinyl-record {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: repeating-radial-gradient(#111827, #111827 2px, #1f2937 3px, #1f2937 4px);
+            border: 2px solid #374151;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .vinyl-record::after {
+            content: '';
+            position: absolute;
+            width: 35%;
+            height: 35%;
+            background: linear-gradient(135deg, #ef4444 30%, #991b1b 80%);
+            border-radius: 50%;
+            border: 1.5px solid #e5e7eb;
+        }
+
+        .spin-anim {
+            animation: spin 3.5s linear infinite;
+        }
+
+        .spin-paused {
+            animation-play-state: paused;
+        }
+
+        .tonearm {
+            position: absolute;
+            top: -6px;
+            right: -10px;
+            width: 20px;
+            height: 50px;
+            pointer-events: none;
+            z-index: 20;
+            transform-origin: 10px 10px;
+            transition: transform 0.5s ease;
+        }
+
+        .tonearm-base {
+            width: 12px;
+            height: 12px;
+            background: #cbd5e1;
+            border-radius: 50%;
+            border: 2px solid #64748b;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+        }
+
+        .tonearm-stick {
+            width: 2px;
+            height: 32px;
+            background: #94a3b8;
+            position: absolute;
+            top: 10px;
+            left: 8px;
+        }
+
+        .tonearm-head {
+            width: 5px;
+            height: 10px;
+            background: #334155;
+            position: absolute;
+            top: 38px;
+            left: 6px;
+            transform: rotate(20deg);
+        }
+
+        .arm-rest {
+            transform: rotate(0deg);
+        }
+
+        .arm-play {
+            transform: rotate(32deg);
+        }
+
+        /* CHAT UI */
+        .chat-bubble-user {
+            background: #2563EB;
+            color: white;
+            border-radius: 16px 16px 0px 16px;
+            align-self: flex-end;
+            padding: 10px 14px;
+            max-w: 85%;
+            font-size: 13px;
+            word-break: break-word;
+        }
+
+        .chat-bubble-admin {
+            background: #F1F5F9;
+            color: #1E293B;
+            border-radius: 16px 16px 16px 0px;
+            align-self: flex-start;
+            padding: 10px 14px;
+            max-w: 85%;
+            font-size: 13px;
+            border: 1px solid #E2E8F0;
+            word-break: break-word;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="p-3 sm:p-6 md:p-8 min-h-screen text-slate-800 antialiased overflow-x-hidden">
+
+<audio id="bgMusic" loop>
+    <source src="YE_Father.mp3" type="audio/mpeg">
+</audio>
+
+<div id="authModal"
+     class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-sm sm:max-w-md p-6 sm:p-8 flex flex-col gap-5 shadow-2xl relative animate-fade-in">
+        <div class="flex justify-between items-center border-b border-slate-200 pb-3">
+            <h2 id="authTitle" class="text-lg sm:text-xl font-extrabold text-slate-800">Tizimga Kirish</h2>
+            <button onclick="closeAuthModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2">✖
+            </button>
+        </div>
+
+        <div id="authAlert" class="hidden p-3 rounded-xl text-xs font-semibold text-center"></div>
+
+        <form onsubmit="handleAuth(event)" class="flex flex-col gap-4">
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Username</label>
+                <input type="text" id="authUsername" required placeholder="username"
+                       class="w-full mt-1.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 transition">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Parol (Min. 8 ta belgi)</label>
+                <input type="password" id="authPassword" required minlength="8" placeholder="••••••••"
+                       class="w-full mt-1.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-600 transition">
+            </div>
+
+            <button type="submit" id="authSubmitBtn"
+                    class="btn-glow bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition text-sm mt-1">
+                Kirish ➔
+            </button>
+        </form>
+
+        <div class="text-center text-xs text-slate-500 border-t border-slate-200 pt-3">
+            <span id="authToggleText">Hisobingiz yo'qmi?</span>
+            <button onclick="toggleAuthMode()" id="authToggleBtn" class="text-blue-600 font-bold hover:underline ml-1">
+                Ro'yxatdan o'tish
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="adminModal"
+     class="fixed inset-0 bg-slate-900/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-4xl max-h-[90vh] p-5 sm:p-7 flex flex-col gap-5 shadow-2xl relative overflow-hidden animate-fade-in">
+        <div class="flex justify-between items-center border-b border-slate-200 pb-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xl">👑</span>
+                <h2 class="text-base sm:text-xl font-extrabold text-slate-800">Admin Boshqaruv Paneli</h2>
+            </div>
+            <button onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-700 font-bold text-xl px-2">✖
+            </button>
+        </div>
+
+        <div id="adminOtpStep" class="flex flex-col items-center justify-center py-8 gap-4 max-w-xs mx-auto w-full">
+            <p class="text-xs sm:text-sm text-slate-600 text-center">Telegramingizga tasdiqlash kodi yuboriladi.</p>
+            <button onclick="requestAdminOTP()" id="reqOtpBtn"
+                    class="btn-glow bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl text-xs sm:text-sm transition w-full">
+                📲 Telegramga Kod Yuborish
+            </button>
+
+            <div id="otpInputArea" class="hidden w-full flex flex-col gap-3">
+                <input type="text" id="adminOtpInput" placeholder="6 xonali kod" maxlength="6"
+                       class="w-full text-center text-xl font-mono tracking-widest bg-slate-50 border border-slate-300 rounded-xl py-2.5 focus:outline-none focus:border-blue-600">
+                <button onclick="verifyAdminOTP()"
+                        class="btn-glow bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-xs sm:text-sm transition">
+                    Tasdiqlash ➔
+                </button>
+            </div>
+
+            <div id="adminAlert" class="hidden text-xs font-semibold text-center p-2.5 rounded-lg w-full"></div>
+        </div>
+
+        <div id="adminDashboardStep" class="hidden flex-1 overflow-y-auto space-y-5 pr-1">
+            <div class="bg-blue-50/80 p-4 rounded-xl border border-blue-200 flex flex-col sm:flex-row items-center gap-3">
+                <span class="text-xs font-bold text-blue-800 whitespace-nowrap">🔑 Parol Tiklash:</span>
+                <input type="text" id="resetUsernameInput" placeholder="Target Username"
+                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none">
+                <input type="password" id="resetNewPassInput" placeholder="Yangi Parol (min 8)"
+                       class="bg-white border rounded-lg px-3 py-1.5 text-xs w-full sm:w-40 focus:outline-none">
+                <button onclick="executeResetPassword()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs w-full sm:w-auto transition whitespace-nowrap">
+                    Saqlash
+                </button>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">👥 Userlar Ro'yxati</h3>
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-xs text-left text-slate-600">
+                        <thead class="text-[10px] uppercase bg-slate-100 text-slate-700">
+                        <tr>
+                            <th class="px-3.5 py-2.5">#</th>
+                            <th class="px-3.5 py-2.5">Username</th>
+                            <th class="px-3.5 py-2.5">Sana</th>
+                            <th class="px-3.5 py-2.5 text-right">Amal</th>
+                        </tr>
+                        </thead>
+                        <tbody id="adminUsersList"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">📂 Yuklangan Bazalar</h3>
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-xs text-left text-slate-600">
+                        <thead class="text-[10px] uppercase bg-slate-100 text-slate-700">
+                        <tr>
+                            <th class="px-3.5 py-2.5">Fayl Nomi</th>
+                            <th class="px-3.5 py-2.5">Yuklagan User</th>
+                            <th class="px-3.5 py-2.5">Hajmi</th>
+                            <th class="px-3.5 py-2.5 text-right">Yuklab Olish</th>
+                        </tr>
+                        </thead>
+                        <tbody id="adminFilesList"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="chatWidget" class="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-40 hidden flex flex-col items-start gap-2">
+    <div id="chatWindow"
+         class="glass-card w-[calc(100vw-32px)] sm:w-[340px] h-[380px] sm:h-[440px] flex flex-col hidden shadow-2xl transition-all duration-300 origin-bottom-left transform scale-95 opacity-0">
+        <div class="bg-blue-600 text-white p-3.5 rounded-t-2xl flex justify-between items-center shadow-md">
+            <div class="flex items-center gap-2">
+                <span class="text-lg bg-white/20 p-1 rounded-full">👨‍💼</span>
+                <div>
+                    <h4 class="font-bold text-xs sm:text-sm">Sotuvchi & Analitik</h4>
+                    <p id="chatStatusText" class="text-[10px] text-emerald-300 font-medium">🟢 Onlayn</p>
+                </div>
+            </div>
+            <button onclick="toggleChat()" class="text-blue-200 hover:text-white font-bold px-1.5">✖</button>
+        </div>
+
+        <div id="chatMessages" class="flex-1 p-3.5 overflow-y-auto chat-container flex flex-col gap-2.5">
+            <div class="chat-bubble-admin">Assalomu alaykum! Analiz bo'yicha savollaringiz bormi?</div>
+        </div>
+
+        <div class="p-2.5 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex gap-2 items-center">
+            <input type="file" id="chatFileInput" class="hidden" onchange="handleChatFileSelect(this)">
+            <button onclick="document.getElementById('chatFileInput').click()"
+                    class="text-slate-500 hover:text-blue-600 p-2 bg-white rounded-xl border border-slate-200"
+                    title="Media">📎
+            </button>
+            <input type="text" id="chatInput" placeholder="Xabaringiz..."
+                   class="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 shadow-inner">
+            <button onclick="sendMessage()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold">➔
+            </button>
+        </div>
+    </div>
+
+    <button id="chatBtn" onclick="toggleChat()"
+            class="bg-blue-600 hover:bg-blue-700 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-2xl flex items-center justify-center text-xl sm:text-2xl transition-transform hover:scale-110 relative">
+        💬
+        <div id="msgBadge"
+             class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
+            1
+        </div>
+    </button>
+</div>
+
+<div id="musicWidget"
+     class="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 glass-card p-3 sm:p-4 flex items-center gap-3 sm:gap-4 animate-fade-in z-30 shadow-2xl border-slate-200 hidden">
+    <div class="player-wrapper" id="playerWrapper">
+        <div class="vinyl-record spin-anim spin-paused" id="vinylIcon"></div>
+        <div class="tonearm arm-rest" id="tonearm">
+            <div class="tonearm-base"></div>
+            <div class="tonearm-stick"></div>
+            <div class="tonearm-head"></div>
+        </div>
+    </div>
+    <div class="flex flex-col w-16 sm:w-24">
+        <div class="flex justify-between items-center mb-1">
+            <span class="text-[9px] font-bold text-slate-500 uppercase">Ovoz</span>
+            <span id="volText" class="text-[9px] font-bold text-slate-700 bg-slate-100 px-1 rounded">20%</span>
+        </div>
+        <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.2"
+               class="w-full h-1 bg-slate-200 rounded cursor-pointer">
+    </div>
+</div>
+
+<div id="loadingOverlay"
+     class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300 p-4">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl flex flex-col items-center max-w-xs text-center">
+        <div class="spinner mb-4"></div>
+        <h3 class="text-sm font-bold text-slate-800 mb-1">4K Render Qilinmoqda</h3>
+        <div class="bg-slate-100 px-4 py-2 rounded-xl font-mono text-sm font-bold text-blue-600 tracking-wider w-full">
+            <span id="renderTimer">00:00</span>
+        </div>
+    </div>
+</div>
+
+<div class="max-w-[1440px] mx-auto space-y-5 sm:space-y-7">
+
+    <header class="glass-card p-4 sm:p-5 animate-fade-in relative">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl sm:text-4xl">📊</span>
+                <div>
+                    <h1 class="text-base sm:text-xl font-extrabold text-slate-800 tracking-tight leading-none">SMART
+                        ANALYTICS</h1>
+                    <p class="text-xs text-slate-500 mt-1">Sotuvlar va Baza Tahlili Platformasi</p>
+                </div>
+            </div>
+
+            <div class="hidden md:flex items-center gap-3">
+                <button onclick="openAdminModal()"
+                        class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-sm">
+                    👑 Admin Panel
+                </button>
+                <button id="authOpenBtn" onclick="openAuthModal()"
+                        class="btn-glow bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-1.5 shadow-md">
+                    🔑 Kirish / Ro'yxatdan o'tish
+                </button>
+                <div id="userProfile"
+                     class="hidden flex items-center gap-2.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold text-slate-700">👤 @<span id="displayUsername">user</span></span>
+                    <button onclick="logout()"
+                            class="text-xs font-bold text-red-600 hover:text-red-800 bg-white px-2.5 py-1 rounded-lg shadow-sm border">
+                        Chiqish 🚪
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="toggleMobileMenu()"
+                    class="md:hidden text-slate-700 hover:text-blue-600 p-2 text-2xl focus:outline-none">
+                ☰
+            </button>
+        </div>
+
+        <div id="mobileMenu"
+             class="hidden md:hidden flex-col gap-2.5 mt-4 pt-4 border-t border-slate-200 animate-fade-in">
+            <button onclick="openAdminModal()"
+                    class="w-full bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition text-center">
+                👑 Admin Panel
+            </button>
+            <button id="authOpenBtnMobile" onclick="openAuthModal()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold text-xs sm:text-sm transition text-center">
+                🔑 Kirish / Ro'yxatdan o'tish
+            </button>
+            <div id="userProfileMobile"
+                 class="hidden w-full flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-slate-200">
+                <span class="text-xs font-bold text-slate-700">👤 @<span id="displayUsernameMobile">user</span></span>
+                <button onclick="logout()" class="text-xs font-bold text-red-600 bg-white px-3 py-1 rounded-lg border">
+                    Chiqish 🚪
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="homeHeroSection"
+         class="glass-card p-6 sm:p-8 md:p-10 flex flex-col lg:flex-row items-center justify-between gap-8 animate-fade-in">
+        <div class="w-full lg:w-2/3 space-y-4 text-left">
+            <span class="inline-block bg-blue-50 text-blue-600 border border-blue-200 text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">🚀 Aqlli Biznes Yechimlar</span>
+            <h2 class="text-xl sm:text-3xl lg:text-4xl font-extrabold text-slate-800 leading-tight">Biznes sotuvlarini
+                zudlik bilan tahlil qiling!</h2>
+            <p class="text-slate-600 text-xs sm:text-base leading-relaxed">
+                Excel va CSV savdo bazalaringizni yuklang hamda Pareto grafiklari va daromadlar zichligini 4K sifatda
+                vizualizatsiya qiling.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                    <h4 class="font-bold text-slate-700 text-xs sm:text-sm mb-1">ℹ️ Biz haqimizda (About)</h4>
+                    <p class="text-xs text-slate-500 leading-normal">FastAPI va Telegram Bot bilan integratsiya qilingan
+                        avtomatlashtirilgan analiz platformasi.</p>
+                </div>
+
+                <div class="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between gap-2">
+                    <h4 class="font-bold text-slate-700 text-xs sm:text-sm">📞 Aloqa (Contact)</h4>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <a href="https://t.me/telegram_username" target="_blank"
+                           class="bg-blue-500 text-white hover:bg-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">
+                            ✈️ Telegram
+                        </a>
+                        <a href="https://instagram.com/instagram_username" target="_blank"
+                           class="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">
+                            📷 Instagram
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-3 flex flex-col sm:flex-row flex-wrap gap-3">
+                <button onclick="promptUpload()"
+                        class="btn-glow bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto">
+                    📁 Baza Yuklashni Boshlash
+                </button>
+                <button onclick="downloadPNG()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto">
+                    📸 4K PNG
+                </button>
+                <button onclick="downloadVideo()"
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-5 py-3 rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-1.5 shadow-md w-full sm:w-auto">
+                    🎬 4K Video
+                </button>
+            </div>
+        </div>
+
+        <div class="w-full lg:w-1/3 flex justify-center items-center">
+            <div class="relative w-40 h-40 sm:w-52 sm:h-52 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center text-white text-5xl sm:text-6xl shadow-2xl transform rotate-2 hover:rotate-0 transition duration-300">
+                📈
+                <div class="absolute -bottom-3 -left-3 bg-white text-slate-800 px-3 py-1.5 rounded-2xl shadow-lg text-xs font-bold border border-slate-100 whitespace-nowrap">
+                    ⚡ Matplotlib 4K Engine
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="statusAlert"
+         class="hidden glass-card p-4 bg-blue-50 border-blue-200 text-blue-700 text-xs sm:text-sm font-medium animate-fade-in"></div>
+
+    <input type="file" id="fileInput" class="hidden" accept=".csv, .xlsx, .xls" onchange="uploadData()">
+
+    <div class="glass-card flex border-b border-slate-200 px-3 pt-2 hidden animate-fade-in overflow-x-auto" id="tabNav">
+        <button onclick="switchTab('dashboard')" id="tab-dashboard"
+                class="tab-btn tab-active px-5 py-3 text-xs sm:text-sm text-slate-600 hover:text-blue-600 whitespace-nowrap">
+            📊 Asosiy Dashboard
+        </button>
+        <button onclick="switchTab('table')" id="tab-table"
+                class="tab-btn px-5 py-3 text-xs sm:text-sm text-slate-600 hover:text-blue-600 whitespace-nowrap">🗂
+            Ma'lumotlar Bazasi
+        </button>
+    </div>
+
+    <div id="content-dashboard" class="space-y-6 hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div class="glass-card p-5"><span id="kpi-title-1"
+                                              class="text-xs font-bold text-slate-400 uppercase tracking-wider">Jami Tushum</span>
+                <div class="mt-2"><span id="kpi-revenue"
+                                        class="text-lg sm:text-2xl font-extrabold text-slate-800">0</span></div>
+            </div>
+            <div class="glass-card p-5"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Transaksiyalar | Chek</span>
+                <div class="mt-2"><span id="kpi-tx" class="text-lg sm:text-2xl font-extrabold text-slate-800">0</span>
+                </div>
+            </div>
+            <div class="glass-card p-5 sm:col-span-2 lg:col-span-1"><span id="kpi-title-2"
+                                                                          class="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Yetakchilar</span>
+                <div class="mt-2"><span id="kpi-top" class="text-sm sm:text-lg font-extrabold text-slate-800">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6 animate-fade-in">
+            <div class="glass-card p-4 sm:p-6"><h3 id="title-pareto" class="text-slate-700 text-sm font-bold mb-3">Top
+                Mahsulotlar</h3>
+                <div id="paretoChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+            </div>
+            <div class="glass-card p-4 sm:p-6"><h3 id="title-kde" class="text-slate-700 text-sm font-bold mb-3">Zichlik
+                darajasi</h3>
+                <div id="kdeChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+            </div>
+            <div class="glass-card p-4 sm:p-6"><h3 id="title-seller" class="text-slate-700 text-sm font-bold mb-3">Reja
+                va Amal</h3>
+                <div id="sellerChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+            </div>
+            <div class="glass-card p-4 sm:p-6"><h3 id="title-category" class="text-slate-700 text-sm font-bold mb-3">
+                Kategoriyalar</h3>
+                <div id="categoryChart" class="w-full h-[280px] sm:h-[340px] md:h-[380px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="content-table" class="glass-card p-4 sm:p-6 hidden animate-fade-in">
+        <div class="overflow-x-auto max-h-[500px]">
+            <table class="w-full text-xs sm:text-sm text-left text-slate-500">
+                <thead class="text-xs text-slate-700 uppercase bg-slate-50 sticky top-0" id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_BASE = "http://localhost:8000/api";
+    const WS_URL = "ws://localhost:8000/api/chat/ws";
+    let chartsObj = [];
+    let isAuth = false;
+    let authMode = "login";
+    let currentUsername = "";
+
+    function toggleMobileMenu() {
+        document.getElementById('mobileMenu').classList.toggle('hidden');
+    }
+
+    function openAuthModal() {
+        document.getElementById('authModal').classList.remove('hidden');
+    }
+
+    function closeAuthModal() {
+        document.getElementById('authModal').classList.add('hidden');
+    }
+
+    function promptUpload() {
+        if (!isAuth) {
+            alert("Baza yuklash uchun avval ro'yxatdan o'ting!");
+            openAuthModal();
+        } else {
+            document.getElementById('fileInput').click();
+        }
+    }
+
+    function toggleAuthMode() {
+        authMode = authMode === "login" ? "register" : "login";
+        document.getElementById('authTitle').innerText = authMode === "register" ? "Ro'yxatdan O'tish" : "Tizimga Kirish";
+        document.getElementById('authSubmitBtn').innerText = authMode === "register" ? "Ro'yxatdan O'tish 🚀" : "Kirish ➔";
+        document.getElementById('authToggleText').innerText = authMode === "register" ? "Hisobingiz bormi?" : "Hisobingiz yo'qmi?";
+        document.getElementById('authToggleBtn').innerText = authMode === "register" ? "Tizimga kirish" : "Ro'yxatdan o'tish";
+    }
+
+    async function handleAuth(e) {
+        e.preventDefault();
+        const u = document.getElementById('authUsername').value.trim();
+        const p = document.getElementById('authPassword').value.trim();
+        const alertBox = document.getElementById('authAlert');
+
+        if (p.length < 8) {
+            alertBox.className = "p-3 rounded-xl text-xs font-semibold text-center bg-red-100 text-red-700";
+            alertBox.innerText = "❌ Parol kamida 8 ta belgidan iborat bo'lishi shart!";
+            alertBox.classList.remove('hidden');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/${authMode}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, password: p})
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.detail || "Xatolik!");
+
+            currentUsername = u;
+            isAuth = true;
+            closeAuthModal();
+
+            document.getElementById('authOpenBtn').classList.add('hidden');
+            document.getElementById('authOpenBtnMobile').classList.add('hidden');
+            document.getElementById('chatWidget').classList.remove('hidden');
+            document.getElementById('musicWidget').classList.remove('hidden');
+
+            document.getElementById('userProfile').classList.remove('hidden');
+            document.getElementById('userProfileMobile').classList.remove('hidden');
+            document.getElementById('displayUsername').innerText = u;
+            document.getElementById('displayUsernameMobile').innerText = u;
+
+            connectWebSocket();
+
+        } catch (err) {
+            alertBox.className = "p-3 rounded-xl text-xs font-semibold text-center bg-red-100 text-red-700";
+            alertBox.innerText = "❌ " + err.message;
+            alertBox.classList.remove('hidden');
+        }
+    }
+
+    // TO'LIQ HOME PAGE VA 0-HOLATGA QAYTISH
+    function logout() {
+        isAuth = false;
+        currentUsername = "";
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        if (!bgMusic.paused) toggleMusic();
+        chartsObj.forEach(c => c.dispose());
+        chartsObj = [];
+        window.location.reload();
+    }
+
+    // ADMIN PANEL
+    function openAdminModal() {
+        document.getElementById('adminModal').classList.remove('hidden');
+        document.getElementById('adminOtpStep').classList.remove('hidden');
+        document.getElementById('adminDashboardStep').classList.add('hidden');
+        document.getElementById('otpInputArea').classList.add('hidden');
+        document.getElementById('reqOtpBtn').classList.remove('hidden');
+        document.getElementById('adminAlert').classList.add('hidden');
+    }
+
+    function closeAdminModal() {
+        document.getElementById('adminModal').classList.add('hidden');
+    }
+
+    async function requestAdminOTP() {
+        const alertBox = document.getElementById('adminAlert');
+        try {
+            const res = await fetch(`${API_BASE}/admin/request-otp`, {method: 'POST'});
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.detail);
+            alertBox.className = "text-xs font-semibold text-center p-2.5 rounded-lg bg-emerald-100 text-emerald-700 w-full";
+            alertBox.innerText = "📲 Kod Telegramga yuborildi!";
+            alertBox.classList.remove('hidden');
+            document.getElementById('reqOtpBtn').classList.add('hidden');
+            document.getElementById('otpInputArea').classList.remove('hidden');
+            document.getElementById('adminOtpInput').focus();
+        } catch (err) {
+            alertBox.className = "text-xs font-semibold text-center p-2.5 rounded-lg bg-red-100 text-red-700 w-full";
+            alertBox.innerText = "❌ " + err.message;
+            alertBox.classList.remove('hidden');
+        }
+    }
+
+    async function verifyAdminOTP() {
+        const otpVal = document.getElementById('adminOtpInput').value.trim();
+        const alertBox = document.getElementById('adminAlert');
+        try {
+            const res = await fetch(`${API_BASE}/admin/verify-otp`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({otp: otpVal})
+            });
+            if (!res.ok) throw new Error("Kod xato!");
+            loadAdminData();
+        } catch (err) {
+            alertBox.className = "text-xs font-semibold text-center p-2.5 rounded-lg bg-red-100 text-red-700 w-full";
+            alertBox.innerText = "❌ " + err.message;
+            alertBox.classList.remove('hidden');
+        }
+    }
+
+    async function loadAdminData() {
+        try {
+            const res = await fetch(`${API_BASE}/admin/data`);
+            const result = await res.json();
+
+            if (res.ok && result.status === "success") {
+                document.getElementById('adminOtpStep').classList.add('hidden');
+                document.getElementById('adminDashboardStep').classList.remove('hidden');
+
+                const usersTbody = document.getElementById('adminUsersList');
+                usersTbody.innerHTML = result.users.length ? result.users.map((u, i) => `
+                        <tr class="bg-white border-b hover:bg-slate-50">
+                            <td class="px-3.5 py-2 font-bold">${i + 1}</td>
+                            <td class="px-3.5 py-2 font-semibold text-blue-600">@${u.username}</td>
+                            <td class="px-3.5 py-2 text-slate-400">${u.registered_at}</td>
+                            <td class="px-3.5 py-2 text-right">
+                                <button onclick="deleteUser('${u.username}')" class="bg-red-50 text-red-600 hover:bg-red-100 px-2.5 py-1 rounded-lg text-xs font-bold">🗑 O'chirish</button>
+                            </td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="4" class="p-3.5 text-center text-slate-400">Userlar yo\'q</td></tr>';
+
+                const filesTbody = document.getElementById('adminFilesList');
+                filesTbody.innerHTML = result.files.length ? result.files.map(f => `
+                        <tr class="bg-white border-b hover:bg-slate-50">
+                            <td class="px-3.5 py-2 font-bold text-slate-700 truncate max-w-[120px]">${f.filename}</td>
+                            <td class="px-3.5 py-2 font-semibold text-blue-600">@${f.username}</td>
+                            <td class="px-3.5 py-2 text-slate-500">${f.size}</td>
+                            <td class="px-3.5 py-2 text-right">
+                                <a href="${API_BASE}/admin/download-file/${f.id}" target="_blank" class="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-2.5 py-1 rounded-lg text-xs font-bold">⬇ Yuklab olish</a>
+                            </td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="4" class="p-3.5 text-center text-slate-400">Bazalar yo\'q</td></tr>';
+            }
+        } catch (e) {
+            alert("Admin ma'lumot xatosi!");
+        }
+    }
+
+    async function deleteUser(username) {
+        if (!confirm(`Haqiqatan ham @${username} ni o'chirmoqchimisiz?`)) return;
+        try {
+            const res = await fetch(`${API_BASE}/admin/delete-user/${username}`, {method: 'DELETE'});
+            if (res.ok) {
+                if (username === currentUsername) {
+                    alert("Sizning hisobingiz o'chirildi!");
+                    logout();
+                } else {
+                    loadAdminData();
+                }
+            }
+        } catch (e) {
+            alert("O'chirishda xatolik");
+        }
+    }
+
+    async function executeResetPassword() {
+        const u = document.getElementById('resetUsernameInput').value.trim();
+        const p = document.getElementById('resetNewPassInput').value.trim();
+        if (!u || !p) return alert("Username va yangi parol kiriting!");
+        if (p.length < 8) return alert("Parol kamida 8 ta belgidan iborat bo'lishi kerak!");
+
+        try {
+            const res = await fetch(`${API_BASE}/admin/reset-password`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, new_password: p})
+            });
+            if (res.ok) {
+                alert(`@${u} paroli yangilandi!`);
+                document.getElementById('resetUsernameInput').value = '';
+                document.getElementById('resetNewPassInput').value = '';
+            } else alert("User topilmadi!");
+        } catch (e) {
+            alert("Xatolik");
+        }
+    }
+
+    // CHAT WEBSOCKET
+    const chatWindow = document.getElementById('chatWindow');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const msgBadge = document.getElementById('msgBadge');
+    const chatStatusText = document.getElementById('chatStatusText');
+    let ws;
+    let unreadCount = 0;
+
+    function connectWebSocket() {
+        if (!isAuth) return;
+        ws = new WebSocket(WS_URL);
+        ws.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            if (data.type === "status") {
+                chatStatusText.innerText = data.status === "online" ? "🟢 Onlayn" : "🔴 Oflayn";
+            } else if (data.type === "message") {
+                addMessage(data.text, 'admin');
+                triggerBadge();
+            } else if (data.type === "image") {
+                addImageMessage(`data:image/jpeg;base64,${data.image}`, 'admin');
+                triggerBadge();
+            } else if (data.type === "video") {
+                addVideoMessage(`data:video/mp4;base64,${data.video}`, 'admin');
+                triggerBadge();
+            } else if (data.type === "file") {
+                addFileMessage(data.name, `data:application/octet-stream;base64,${data.file}`, 'admin');
+                triggerBadge();
+            }
+        };
+        ws.onclose = function () {
+            if (isAuth) setTimeout(connectWebSocket, 3000);
+        };
+    }
+
+    function triggerBadge() {
+        if (chatWindow.classList.contains('hidden')) {
+            unreadCount++;
+            msgBadge.innerText = unreadCount;
+            msgBadge.classList.remove('hidden');
+        }
+    }
+
+    function toggleChat() {
+        if (chatWindow.classList.contains('hidden')) {
+            chatWindow.classList.remove('hidden');
+            setTimeout(() => chatWindow.classList.remove('scale-95', 'opacity-0'), 10);
+            unreadCount = 0;
+            msgBadge.classList.add('hidden');
+        } else {
+            chatWindow.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => chatWindow.classList.add('hidden'), 300);
+        }
+    }
+
+    function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        addMessage(text, 'user');
+        chatInput.value = '';
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({type: "text", text: text, username: currentUsername}));
+        }
+    }
+
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function handleChatFileSelect(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const base64Data = e.target.result.split(',')[1];
+                if (file.type.startsWith('image/')) addImageMessage(e.target.result, 'user');
+                else if (file.type.startsWith('video/')) addVideoMessage(e.target.result, 'user');
+                else addFileMessage(file.name, e.target.result, 'user');
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: "file",
+                        file_name: file.name,
+                        mime_type: file.type,
+                        file_data: base64Data,
+                        username: currentUsername
+                    }));
+                }
+            };
+            reader.readAsDataURL(file);
+            input.value = '';
+        }
+    }
+
+    function addMessage(t, s) {
+        const d = document.createElement('div');
+        d.className = s === 'user' ? 'chat-bubble-user' : 'chat-bubble-admin';
+        d.innerText = t;
+        chatMessages.appendChild(d);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addImageMessage(u, s) {
+        const d = document.createElement('div');
+        d.className = s === 'user' ? 'chat-bubble-user' : 'chat-bubble-admin';
+        d.innerHTML = `<img src="${u}" class="max-w-[140px] rounded-lg">`;
+        chatMessages.appendChild(d);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addVideoMessage(u, s) {
+        const d = document.createElement('div');
+        d.className = s === 'user' ? 'chat-bubble-user' : 'chat-bubble-admin';
+        d.innerHTML = `<video src="${u}" controls class="max-w-[150px] rounded-lg"></video>`;
+        chatMessages.appendChild(d);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addFileMessage(n, u, s) {
+        const d = document.createElement('div');
+        d.className = s === 'user' ? 'chat-bubble-user' : 'chat-bubble-admin';
+        d.innerHTML = `<a href="${u}" download="${n}" class="underline font-semibold">📁 ${n}</a>`;
+        chatMessages.appendChild(d);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // MUSIC
+    const bgMusic = document.getElementById('bgMusic');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const vinylIcon = document.getElementById('vinylIcon');
+    const tonearm = document.getElementById('tonearm');
+    bgMusic.volume = 0.2;
+
+    const toggleMusic = () => {
+        if (bgMusic.paused) {
+            bgMusic.play();
+            vinylIcon.classList.remove('spin-paused');
+            tonearm.className = 'tonearm arm-play';
+        } else {
+            bgMusic.pause();
+            vinylIcon.classList.add('spin-paused');
+            tonearm.className = 'tonearm arm-rest';
+        }
+    };
+    document.getElementById('playerWrapper').addEventListener('click', toggleMusic);
+    volumeSlider.addEventListener('input', (e) => {
+        bgMusic.volume = e.target.value;
+        document.getElementById('volText').innerText = Math.round(e.target.value * 100) + '%';
+    });
+
+    function switchTab(t) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+        document.getElementById(`tab-${t}`).classList.add('tab-active');
+        document.getElementById('content-dashboard').classList.add('hidden');
+        document.getElementById('content-table').classList.add('hidden');
+        document.getElementById(`content-${t}`).classList.remove('hidden');
+        if (t === 'dashboard') {
+            setTimeout(() => chartsObj.forEach(c => c.resize()), 50);
+        }
+    }
+
+    async function uploadData() {
+        if (!isAuth) return promptUpload();
+        const fileInput = document.getElementById('fileInput');
+        const statusAlert = document.getElementById('statusAlert');
+        if (!fileInput.files[0]) return;
+
+        statusAlert.classList.remove('hidden');
+        statusAlert.innerText = "⏳ Baza hisoblanmoqda...";
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('username', currentUsername);
+
+        try {
+            const res = await fetch(`${API_BASE}/analyze`, {method: 'POST', body: formData});
+            const result = await res.json();
+
+            if (res.ok && result.status === "success") {
+                statusAlert.className = "glass-card p-4 bg-emerald-50 text-emerald-700 text-xs sm:text-sm font-medium animate-fade-in";
+                statusAlert.innerText = "✅ Baza muvaffaqiyatli ochildi!";
+                document.getElementById('tabNav').classList.remove('hidden');
+                document.getElementById('content-dashboard').classList.remove('hidden');
+
+                document.getElementById('kpi-title-1').innerText = `Jami ${result.data.metadata.revenue_title}`;
+                document.getElementById('kpi-title-2').innerText = `Top ${result.data.metadata.seller_title} | ${result.data.metadata.product_title}`;
+                document.getElementById('title-pareto').innerText = `Top ${result.data.metadata.product_title}lar`;
+                document.getElementById('title-seller').innerText = `${result.data.metadata.seller_title}lar Natijasi`;
+                document.getElementById('title-category').innerText = `${result.data.metadata.category_title}lar Ulushi`;
+                document.getElementById('title-kde').innerText = `${result.data.metadata.revenue_title} zichligi`;
+
+                document.getElementById('kpi-revenue').innerText = `${result.data.kpi.total_revenue.toLocaleString('uz-UZ')} UZS`;
+                document.getElementById('kpi-tx').innerText = `${result.data.kpi.transactions} ta | ~${result.data.kpi.avg_check.toLocaleString('uz-UZ')}`;
+                document.getElementById('kpi-top').innerText = `${result.data.kpi.top_seller} | ${result.data.kpi.top_product.substring(0, 12)}...`;
+
+                chartsObj.forEach(c => c.dispose());
+                chartsObj = [];
+
+                // 🎯 IDEAL GRID CONFIG (containLabel: true & clean margins)
+                const paretoChart = echarts.init(document.getElementById('paretoChart'));
+                paretoChart.setOption({
+                    tooltip: {trigger: 'axis'},
+                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    xAxis: {
+                        type: 'category',
+                        data: result.data.pareto.map(p => p[result.data.product_col].substring(0, 10)),
+                        axisLabel: {fontSize: 11, interval: 0, rotate: 15}
+                    },
+                    yAxis: [{type: 'value', axisLabel: {fontSize: 11}}],
+                    series: [{
+                        data: result.data.pareto.map(p => p[result.data.revenue_col]),
+                        type: 'bar',
+                        itemStyle: {color: '#2563EB', borderRadius: [6, 6, 0, 0]}
+                    }]
+                });
+                chartsObj.push(paretoChart);
+
+                const kdeChart = echarts.init(document.getElementById('kdeChart'));
+                kdeChart.setOption({
+                    tooltip: {trigger: 'axis'},
+                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    xAxis: {type: 'category', data: result.data.kde.x, axisLabel: {fontSize: 11}},
+                    yAxis: {type: 'value', axisLabel: {fontSize: 11}},
+                    series: [{
+                        data: result.data.kde.y,
+                        type: 'line',
+                        smooth: true,
+                        areaStyle: {color: 'rgba(245, 158, 11, 0.2)'},
+                        lineStyle: {color: '#F59E0B', width: 2.5}
+                    }]
+                });
+                chartsObj.push(kdeChart);
+
+                const sellerChart = echarts.init(document.getElementById('sellerChart'));
+                sellerChart.setOption({
+                    tooltip: {trigger: 'axis'},
+                    grid: {top: 25, bottom: 25, left: '5%', right: '5%', containLabel: true},
+                    xAxis: {type: 'value', axisLabel: {fontSize: 11}},
+                    yAxis: {
+                        type: 'category',
+                        data: result.data.sellers.map(s => s.seller.substring(0, 10)),
+                        axisLabel: {fontSize: 11}
+                    },
+                    series: [
+                        {
+                            name: 'Amalda',
+                            data: result.data.sellers.map(s => s.actual),
+                            type: 'bar',
+                            itemStyle: {color: '#10B981', borderRadius: [0, 4, 4, 0]}
+                        },
+                        {
+                            name: 'Reja',
+                            data: result.data.sellers.map(s => s.target),
+                            type: 'bar',
+                            itemStyle: {color: '#CBD5E1', borderRadius: [0, 4, 4, 0]}
+                        }
+                    ]
+                });
+                chartsObj.push(sellerChart);
+
+                const categoryChart = echarts.init(document.getElementById('categoryChart'));
+                categoryChart.setOption({
+                    tooltip: {trigger: 'item'},
+                    series: [{type: 'pie', radius: ['35%', '70%'], data: result.data.categories, label: {fontSize: 11}}]
+                });
+                chartsObj.push(categoryChart);
+
+                window.addEventListener('resize', () => chartsObj.forEach(c => c.resize()));
+
+                document.getElementById('tableHead').innerHTML = `<tr>${result.data.table_columns.map(col => `<th class="px-4 py-3">${col}</th>`).join('')}</tr>`;
+                document.getElementById('tableBody').innerHTML = result.data.table_data.map(row => `<tr class="bg-white border-b">${result.data.table_columns.map(col => `<td class="px-4 py-2.5 truncate max-w-[160px]">${row[col]}</td>`).join('')}</tr>`).join('');
+            } else throw new Error("Xatolik");
+        } catch (err) {
+            statusAlert.className = "glass-card p-4 bg-red-50 text-red-700 text-xs sm:text-sm font-medium animate-fade-in";
+            statusAlert.innerText = "❌ Xatolik yuz berdi";
+        }
+    }
+
+    async function downloadPNG() {
+        if (!isAuth) return promptUpload();
+        window.open(`${API_BASE}/export/png`, '_blank');
+    }
+
+    async function downloadVideo() {
+        if (!isAuth) return promptUpload();
+        const overlay = document.getElementById('loadingOverlay');
+        const timerEl = document.getElementById('renderTimer');
+        overlay.classList.remove('hidden');
+        setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+
+        let sec = 0;
+        const timerInt = setInterval(() => {
+            sec++;
+            let m = Math.floor(sec / 60).toString().padStart(2, '0');
+            let s = (sec % 60).toString().padStart(2, '0');
+            timerEl.innerText = `${m}:${s}`;
+        }, 1000);
+
+        try {
+            const res = await fetch(`${API_BASE}/export/video`);
+            if (!res.ok) throw new Error();
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = "Analytics_4K_Animated.mp4";
+            a.click();
+        } catch (err) {
+            alert("Avval baza yuklang!");
+        } finally {
+            clearInterval(timerInt);
+            overlay.classList.add('opacity-0');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+httpx
+pandas
+openpyxl
+matplotlib
+seaborn
+python-multipart
+websockets
