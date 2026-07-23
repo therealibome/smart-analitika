@@ -728,7 +728,7 @@
         widgetArrow.innerText = isCollapsed ? '◀' : '▶';
     }
 
-    // 2. CHATNI OCHISH (Mobil bug to'liq to'g'rilandi: floatingWidget yo'qolib qolmaydi)
+    // 2. CHATNI OCHISH
     function toggleChat() {
         if (chatWindow.classList.contains('hidden')) {
             chatWindow.classList.remove('hidden');
@@ -741,7 +741,7 @@
         }
     }
 
-    // 3. FAQAT CHATNI YOPISH (Vidjet turishda davom etadi)
+    // 3. FAQAT CHATNI YOPISH
     function closeChatOnly() {
         chatWindow.classList.add('scale-95', 'opacity-0');
         chatBlurOverlay.classList.remove('active');
@@ -755,11 +755,10 @@
         updateArrowState();
     }
 
-    // 5. XAVFSIZ SCROLL (Telefonda klaviatura va touch harakatlarida chat yo'qolib ketmasligi uchun)
+    // 5. XAVFSIZ SCROLL
     let lastScrollY = window.scrollY;
     window.addEventListener('scroll', () => {
         const currentScrollY = window.scrollY;
-        // Faqat haqiqiy vertical scroll bo'lganda vidjetni yopamiz (chat ochiq bo'lmasa)
         if (Math.abs(currentScrollY - lastScrollY) > 40) {
             if (!floatingWidget.classList.contains('collapsed') && !chatBlurOverlay.classList.contains('active')) {
                 floatingWidget.classList.add('collapsed');
@@ -1135,6 +1134,7 @@
         }
     }
 
+    // ⚡ FAQQAT YUKLASH FUNKSIYASI XAVFSIZ VA BEXATO QILIB TO'G'RILANDI:
     async function uploadData() {
         if (!isAuth) return promptUpload();
         const fileInput = document.getElementById('fileInput');
@@ -1142,7 +1142,8 @@
         if (!fileInput.files[0]) return;
 
         statusAlert.classList.remove('hidden');
-        statusAlert.innerText = "⏳ Baza hisoblanmoqda...";
+        statusAlert.className = "glass-card p-4 bg-blue-50 text-blue-700 text-xs sm:text-sm font-medium animate-fade-in";
+        statusAlert.innerText = "⏳ Baza hisoblanmoqda va analitika tayyorlanmoqda...";
 
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
@@ -1165,26 +1166,26 @@
                 document.getElementById('title-category').innerText = `${result.data.metadata.category_title}lar Ulushi`;
                 document.getElementById('title-kde').innerText = `${result.data.metadata.revenue_title} zichligi`;
 
-                document.getElementById('kpi-revenue').innerText = `${result.data.kpi.total_revenue.toLocaleString('uz-UZ')} UZS`;
-                document.getElementById('kpi-tx').innerText = `${result.data.kpi.transactions} ta | ~${result.data.kpi.avg_check.toLocaleString('uz-UZ')}`;
-                document.getElementById('kpi-top').innerText = `${result.data.kpi.top_seller} | ${result.data.kpi.top_product.substring(0, 12)}...`;
+                document.getElementById('kpi-revenue').innerText = `${Number(result.data.kpi.total_revenue || 0).toLocaleString('uz-UZ')} UZS`;
+                document.getElementById('kpi-tx').innerText = `${result.data.kpi.transactions || 0} ta | ~${Number(result.data.kpi.avg_check || 0).toLocaleString('uz-UZ')}`;
+                document.getElementById('kpi-top').innerText = `${result.data.kpi.top_seller || '-'} | ${String(result.data.kpi.top_product || '-').substring(0, 12)}...`;
 
                 chartsObj.forEach(c => c.dispose());
                 chartsObj = [];
 
-                // ECHARTS GRID CONFIG (Tekkis va toza)
+                // ECHARTS GRID CONFIG
                 const paretoChart = echarts.init(document.getElementById('paretoChart'));
                 paretoChart.setOption({
                     tooltip: {trigger: 'axis'},
                     grid: {top: 20, bottom: 25, left: '3%', right: '3%', containLabel: true},
                     xAxis: {
                         type: 'category',
-                        data: result.data.pareto.map(p => p[result.data.product_col].substring(0, 10)),
+                        data: (result.data.pareto || []).map(p => String(p[result.data.product_col] || '').substring(0, 10)),
                         axisLabel: {fontSize: 11, interval: 0, rotate: 15}
                     },
                     yAxis: [{type: 'value', axisLabel: {fontSize: 11}}],
                     series: [{
-                        data: result.data.pareto.map(p => p[result.data.revenue_col]),
+                        data: (result.data.pareto || []).map(p => p[result.data.revenue_col]),
                         type: 'bar',
                         itemStyle: {color: '#2563EB', borderRadius: [6, 6, 0, 0]}
                     }]
@@ -1195,10 +1196,10 @@
                 kdeChart.setOption({
                     tooltip: {trigger: 'axis'},
                     grid: {top: 20, bottom: 25, left: '3%', right: '3%', containLabel: true},
-                    xAxis: {type: 'category', data: result.data.kde.x, axisLabel: {fontSize: 11}},
+                    xAxis: {type: 'category', data: result.data.kde.x || [], axisLabel: {fontSize: 11}},
                     yAxis: {type: 'value', axisLabel: {fontSize: 11}},
                     series: [{
-                        data: result.data.kde.y,
+                        data: result.data.kde.y || [],
                         type: 'line',
                         smooth: true,
                         areaStyle: {color: 'rgba(245, 158, 11, 0.2)'},
@@ -1214,19 +1215,19 @@
                     xAxis: {type: 'value', axisLabel: {fontSize: 11}},
                     yAxis: {
                         type: 'category',
-                        data: result.data.sellers.map(s => s.seller.substring(0, 10)),
+                        data: (result.data.sellers || []).map(s => String(s.seller || '').substring(0, 10)),
                         axisLabel: {fontSize: 11}
                     },
                     series: [
                         {
                             name: 'Amalda',
-                            data: result.data.sellers.map(s => s.actual),
+                            data: (result.data.sellers || []).map(s => s.actual),
                             type: 'bar',
                             itemStyle: {color: '#10B981', borderRadius: [0, 4, 4, 0]}
                         },
                         {
                             name: 'Reja',
-                            data: result.data.sellers.map(s => s.target),
+                            data: (result.data.sellers || []).map(s => s.target),
                             type: 'bar',
                             itemStyle: {color: '#CBD5E1', borderRadius: [0, 4, 4, 0]}
                         }
@@ -1237,18 +1238,20 @@
                 const categoryChart = echarts.init(document.getElementById('categoryChart'));
                 categoryChart.setOption({
                     tooltip: {trigger: 'item'},
-                    series: [{type: 'pie', radius: ['38%', '70%'], data: result.data.categories, label: {fontSize: 11}}]
+                    series: [{type: 'pie', radius: ['38%', '70%'], data: result.data.categories || [], label: {fontSize: 11}}]
                 });
                 chartsObj.push(categoryChart);
 
                 window.addEventListener('resize', () => chartsObj.forEach(c => c.resize()));
 
-                document.getElementById('tableHead').innerHTML = `<tr>${result.data.table_columns.map(col => `<th class="px-4 py-3">${col}</th>`).join('')}</tr>`;
-                document.getElementById('tableBody').innerHTML = result.data.table_data.map(row => `<tr class="bg-white border-b hover:bg-slate-50 transition-colors">${result.data.table_columns.map(col => `<td class="px-4 py-2.5 truncate max-w-[160px]">${row[col]}</td>`).join('')}</tr>`).join('');
-            } else throw new Error("Xatolik");
+                document.getElementById('tableHead').innerHTML = `<tr>${(result.data.table_columns || []).map(col => `<th class="px-4 py-3">${col}</th>`).join('')}</tr>`;
+                document.getElementById('tableBody').innerHTML = (result.data.table_data || []).map(row => `<tr class="bg-white border-b hover:bg-slate-50 transition-colors">${(result.data.table_columns || []).map(col => `<td class="px-4 py-2.5 truncate max-w-[160px]">${row[col] !== undefined ? row[col] : ''}</td>`).join('')}</tr>`).join('');
+            } else {
+                throw new Error(result.detail || "Fayl tahlilida xatolik yuz berdi!");
+            }
         } catch (err) {
             statusAlert.className = "glass-card p-4 bg-red-50 text-red-700 text-xs sm:text-sm font-medium animate-fade-in";
-            statusAlert.innerText = "❌ Xatolik yuz berdi";
+            statusAlert.innerText = "❌ " + err.message;
         }
     }
 

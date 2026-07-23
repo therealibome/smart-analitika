@@ -14,13 +14,12 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, JSONResponse
 
-# Matplotlib headless (server) rejimida
 import matplotlib
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-app = FastAPI(title="Smart Analytics Live Chat Backend")
+app = FastAPI(title="Smart Analytics Pro Backend")
 
 # ==========================================
 # 1. 🌐 CORS SOZLAMASI
@@ -40,7 +39,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8936728709:AAFeq1IgWiLG7Gh9Cs1DsYfwE-oRgxaSH
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "6758258778")
 SERVER_URL = "https://smart-analitikabyklv.onrender.com"
 
-# Active WebSocket xaritasi: { "username_lowercase": websocket_connection }
 user_connections: Dict[str, WebSocket] = {}
 last_active_user: Optional[str] = None
 
@@ -50,7 +48,6 @@ last_active_user: Optional[str] = None
 # ==========================================
 @app.on_event("startup")
 async def setup_telegram_webhook():
-    """Server ishga tushganida Telegram Webhook-ni ulaydi"""
     if BOT_TOKEN and "O'ZINGIZNING" not in BOT_TOKEN:
         webhook_endpoint = f"{SERVER_URL}/api/telegram-webhook"
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_endpoint}"
@@ -64,7 +61,6 @@ async def setup_telegram_webhook():
 
 @app.get("/api/set-webhook")
 async def manual_set_webhook():
-    """Qo'lda Webhook-ni qayta ulash faydali liniyasi"""
     webhook_endpoint = f"{SERVER_URL}/api/telegram-webhook"
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_endpoint}"
     async with httpx.AsyncClient() as client:
@@ -121,7 +117,6 @@ async def get_tg_file_url(file_id: str) -> str:
 
 
 def parse_admin_command(raw_text: str):
-    """Admin kiritgan /username va xabar matnini ajratib beradi"""
     if not raw_text:
         return None, ""
     parts = raw_text.strip().split(maxsplit=1)
@@ -169,7 +164,7 @@ async def login(data: dict):
 async def request_otp():
     otp_code = str(random.randint(100000, 999999))
     admin_otp_store["current_otp"] = otp_code
-    msg = f"🔐 <b>Smart Analytics Admin</b>\nKirish kodi: <code>{otp_code}</code>"
+    msg = f"🔐 <b>Smart Analytics Admin Panel</b>\nKirish kodi: <code>{otp_code}</code>"
     await send_tg_text(ADMIN_CHAT_ID, msg)
     return {"status": "success", "message": "Kod Telegramga yuborildi!"}
 
@@ -192,58 +187,119 @@ async def get_admin_data():
 
 
 # ==========================================
-# 📊 ANALITIKA VA EXPORT
+# 📊 BAZANI TAHLIL QILISH (Robust & NaN-proof)
 # ==========================================
 @app.post("/api/analyze")
 async def analyze_data(file: UploadFile = File(...), username: str = Form(...)):
     try:
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents)) if file.filename.endswith('.csv') else pd.read_excel(
-            io.BytesIO(contents))
+        if file.filename.endswith('.csv'):
+            try:
+                df = pd.read_csv(io.BytesIO(contents))
+            except Exception:
+                df = pd.read_csv(io.BytesIO(contents), encoding='latin-1')
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
 
-        cols = df.columns.tolist()
+        # Bo'sh qator va kataklarni xavfsiz tozalash
+        df = df.dropna(how='all').fillna(0)
+
+        if df.empty or len(df.columns) == 0:
+            raise HTTPException(status_code=400, detail="Yuklangan fayl ichida ma'lumot topilmadi!")
+
+        cols = [str(c).strip() for c in df.columns.tolist()]
+        df.columns = cols
+
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         rev_col = num_cols[0] if num_cols else cols[-1]
-        prod_col, seller_col, cat_col = cols[0], cols[1] if len(cols) > 1 else cols[0], cols[2] if len(cols) > 2 else \
-        cols[0]
+        prod_col = cols[0]
+        seller_col = cols[1] if len(cols) > 1 else cols[0]
+        cat_col = cols[2] if len(cols) > 2 else cols[0]
+
+        # Narx/Tushum ustunini matnlardan tozalash ($ / so'm / bo'sh joy)
+        if df[rev_col].dtype == object:
+            df[rev_col] = pd.to_numeric(
+                df[rev_col].astype(str).str.replace(r'[^\d.]', '', regex=True),
+                errors='coerce'
+            ).fillna(0)
 
         user_data_store[username] = df
-        uploaded_files_db.append({"id": len(uploaded_files_db) + 1, "filename": file.filename, "username": username,
-                                  "size": f"{round(len(contents) / 1024, 1)} KB"})
+
+        uploaded_files_db.append({
+            "id": len(uploaded_files_db) + 1,
+            "filename": file.filename,
+            "username": username,
+            "size": f"{round(len(contents) / 1024, 1)} KB"
+        })
+
+        total_rev = float(df[rev_col].sum())
+        tx_count = int(len(df))
+        avg_check = float(df[rev_col].mean()) if tx_count > 0 else 0.0
+
+        top_p = str(df.groupby(prod_col)[rev_col].sum().idxmax()) if not df.empty else "-"
+        top_s = str(df.groupby(seller_col)[rev_col].sum().idxmax()) if not df.empty else "-"
+
+        pareto_df = df.groupby(prod_col)[rev_col].sum().reset_index().sort_values(by=rev_col, ascending=False).head(10)
+        pareto_data = pareto_df.to_dict(orient='records')
+
+        sellers_df = df.groupby(seller_col)[rev_col].sum().reset_index().head(5)
+        sellers_data = []
+        for _, row in sellers_df.iterrows():
+            act = float(row[rev_col])
+            sellers_data.append({
+                "seller": str(row[seller_col]),
+                "actual": act,
+                "target": round(act * 1.15, 2)
+            })
+
+        cat_df = df.groupby(cat_col)[rev_col].sum().reset_index().head(5)
+        cat_data = [{"name": str(r[cat_col]), "value": float(r[rev_col])} for _, r in cat_df.iterrows()]
+
+        hist, bin_edges = np.histogram(df[rev_col].dropna(), bins=10)
+        kde_x = [str(round(b, 1)) for b in bin_edges[:-1]]
+        kde_y = [int(h) for h in hist]
 
         return {
             "status": "success",
             "data": {
-                "metadata": {"revenue_title": rev_col, "product_title": prod_col, "seller_title": seller_col,
-                             "category_title": cat_col},
-                "kpi": {"total_revenue": float(df[rev_col].sum()), "transactions": int(len(df)),
-                        "avg_check": float(df[rev_col].mean()),
-                        "top_product": str(df.groupby(prod_col)[rev_col].sum().idxmax()),
-                        "top_seller": str(df.groupby(seller_col)[rev_col].sum().idxmax())},
-                "product_col": prod_col, "revenue_col": rev_col,
-                "pareto": df.groupby(prod_col)[rev_col].sum().reset_index().sort_values(by=rev_col,
-                                                                                        ascending=False).head(
-                    10).to_dict(orient='records'),
-                "sellers": [{"seller": str(r[seller_col]), "actual": float(r[rev_col]),
-                             "target": round(float(r[rev_col]) * 1.15, 2)} for _, r in
-                            df.groupby(seller_col)[rev_col].sum().reset_index().head(5).iterrows()],
-                "categories": [{"name": str(r[cat_col]), "value": float(r[rev_col])} for _, r in
-                               df.groupby(cat_col)[rev_col].sum().reset_index().head(5).iterrows()],
-                "kde": {"x": [str(round(b, 1)) for b in np.histogram(df[rev_col].dropna(), bins=10)[1][:-1]],
-                        "y": [int(h) for h in np.histogram(df[rev_col].dropna(), bins=10)[0]]},
-                "table_columns": cols[:6], "table_data": df.head(15).astype(str).to_dict(orient='records')
+                "metadata": {
+                    "revenue_title": str(rev_col),
+                    "product_title": str(prod_col),
+                    "seller_title": str(seller_col),
+                    "category_title": str(cat_col)
+                },
+                "kpi": {
+                    "total_revenue": total_rev,
+                    "transactions": tx_count,
+                    "avg_check": avg_check,
+                    "top_product": top_p,
+                    "top_seller": top_s
+                },
+                "product_col": str(prod_col),
+                "revenue_col": str(rev_col),
+                "pareto": pareto_data,
+                "sellers": sellers_data,
+                "categories": cat_data,
+                "kde": {"x": kde_x, "y": kde_y},
+                "table_columns": cols[:6],
+                "table_data": df.head(15).astype(str).to_dict(orient='records')
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Xatolik: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Faylni tahlil qilishda xatolik: {str(e)}")
 
 
+# ==========================================
+# 📸 PNG EXPORT
+# ==========================================
 @app.get("/api/export/png")
 async def export_png(username: Optional[str] = None):
-    if not username or username not in user_data_store: raise HTTPException(status_code=400,
-                                                                            detail="Avval baza yuklang!")
+    if not username or username not in user_data_store:
+        raise HTTPException(status_code=400, detail="Avval baza yuklang!")
     df = user_data_store[username]
-    rev_col = df.select_dtypes(include=[np.number]).columns[0]
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    rev_col = num_cols[0] if num_cols else df.columns[-1]
+
     fig, ax = plt.subplots(figsize=(10, 5), dpi=120)
     top_df = df.groupby(df.columns[0])[rev_col].sum().sort_values(ascending=False).head(8)
     ax.bar(top_df.index.astype(str), top_df.values, color='#2563EB')
@@ -256,13 +312,18 @@ async def export_png(username: Optional[str] = None):
     return Response(content=buf.getvalue(), media_type="image/png")
 
 
+# ==========================================
+# 🎬 VIDEO EXPORT
+# ==========================================
 @app.get("/api/export/video")
 async def export_video(username: Optional[str] = None):
-    if not username or username not in user_data_store: raise HTTPException(status_code=400,
-                                                                            detail="Avval baza yuklang!")
+    if not username or username not in user_data_store:
+        raise HTTPException(status_code=400, detail="Avval baza yuklang!")
     import imageio
     df = user_data_store[username]
-    rev_col = df.select_dtypes(include=[np.number]).columns[0]
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    rev_col = num_cols[0] if num_cols else df.columns[-1]
+
     top_df = df.groupby(df.columns[0])[rev_col].sum().sort_values(ascending=False).head(7)
     x_names, y_final, frames = [str(n)[:10] for n in top_df.index], top_df.values, []
 
@@ -289,7 +350,6 @@ async def export_video(username: Optional[str] = None):
 # ==========================================
 # 💬 REALTIME LIVE CHAT (Sayt -> Telegram Bot)
 # ==========================================
-
 @app.websocket("/api/chat/ws")
 async def websocket_chat(websocket: WebSocket):
     global last_active_user
@@ -310,13 +370,11 @@ async def websocket_chat(websocket: WebSocket):
 
             msg_type = msg.get("type")
 
-            # Saytdan kelgan matn
             if msg_type == "text":
                 text = msg.get("text", "")
                 caption = f"💬 <b>Saytdan xabar</b>\n👤 User: /<code>{raw_username}</code>\n\n📝 {text}"
                 await send_tg_text(ADMIN_CHAT_ID, caption)
 
-            # Saytdan kelgan fayl/media
             elif msg_type == "file":
                 file_name = msg.get("file_name", "file")
                 mime_type = msg.get("mime_type", "application/octet-stream")
@@ -335,7 +393,6 @@ async def websocket_chat(websocket: WebSocket):
 # ==========================================
 @app.post("/api/telegram-webhook")
 async def telegram_webhook(request: Request):
-    """Admin kiritgan xabarni mos keluvchi sayt foydalanuvchisiga uzatadi"""
     try:
         data = await request.json()
         message = data.get("message", {})
@@ -343,18 +400,15 @@ async def telegram_webhook(request: Request):
         raw_text = message.get("text") or message.get("caption") or ""
         parsed_target, clean_text = parse_admin_command(raw_text)
 
-        # Agar /username yozilgan bo'lsa o'shanga, yozilmagan bo'lsa oxirgi aktiv userga yuboradi
         target_username = parsed_target if parsed_target else last_active_user
 
         if target_username and target_username in user_connections:
             ws = user_connections[target_username]
 
-            # 1. Matnli xabar
             if "text" in message and clean_text:
                 await ws.send_json({"type": "message", "text": clean_text})
                 await send_tg_text(ADMIN_CHAT_ID, f"✅ @{target_username} ga yuborildi.")
 
-            # 2. Rasm
             elif "photo" in message:
                 photo = message["photo"][-1]
                 img_url = await get_tg_file_url(photo["file_id"])
@@ -362,14 +416,12 @@ async def telegram_webhook(request: Request):
                     await ws.send_json({"type": "image", "image": img_url})
                     await send_tg_text(ADMIN_CHAT_ID, f"🖼 ✅ @{target_username} ga rasm yuborildi.")
 
-            # 3. Video
             elif "video" in message:
                 vid_url = await get_tg_file_url(message["video"]["file_id"])
                 if vid_url:
                     await ws.send_json({"type": "video", "video": vid_url})
                     await send_tg_text(ADMIN_CHAT_ID, f"🎥 ✅ @{target_username} ga video yuborildi.")
 
-            # 4. Hujjat / Fayl
             elif "document" in message:
                 doc = message["document"]
                 doc_url = await get_tg_file_url(doc["file_id"])
@@ -378,8 +430,7 @@ async def telegram_webhook(request: Request):
                     await send_tg_text(ADMIN_CHAT_ID, f"📁 ✅ @{target_username} ga fayl yuborildi.")
         else:
             if target_username:
-                await send_tg_text(ADMIN_CHAT_ID,
-                                   f"❌ <b>@{target_username}</b> hozir saytda emas (oflayn yoki ulagich uzilgan).")
+                await send_tg_text(ADMIN_CHAT_ID, f"❌ <b>@{target_username}</b> hozir saytda emas (oflayn).")
             else:
                 await send_tg_text(ADMIN_CHAT_ID, "⚠️ Hozircha hech qanday foydalanuvchi online emas.")
 
